@@ -14,9 +14,7 @@ auto-attendance-protocol/
 │
 ├── docs/
 │   ├── specification.md             # Protocol Specification 문서
-│   └── fsm/
-│       ├── FSM_design.md            # FSM 설계 (State, Event, Action, Cond 정의)
-│       └── FSM_diagram.md           # FSM 다이어그램 (Mermaid 렌더링)
+│   └── FSM_design.md                # FSM 설계 (State, Event, Action, Cond 정의)
 │
 └── baseCode_Capstone/               # 구현 코드
 ```
@@ -78,7 +76,7 @@ auto-attendance-protocol/
 | 2 → 2 | 채팅 입력 | - | send(msg) |
 | 2 → 0 | breaktime 초과 | - | 미출석 확정 |
 
-> 상세 FSM 설계 → [`docs/fsm/FSM_design.md`](docs/fsm/FSM_design.md)
+> 상세 FSM 설계 → [`docs/FSM_design.md`](docs/FSM_design.md)
 
 ---
 
