@@ -65,3 +65,10 @@ void L3_LLI_setReconfigSrcIdReqFunc(void (*funcPtr)(uint8_t))
 {
     L3_LLI_reconfigSrcIdReqFunc = funcPtr;
 }
+
+// Returns the RSSI (dBm) of the most recently received L2 frame.
+// Used by the CU FSM to determine whether a student is inside the classroom.
+int16_t L3_LLI_getRssi(void)
+{
+    return rcvdRssi;
+}
