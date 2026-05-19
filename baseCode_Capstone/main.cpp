@@ -30,7 +30,7 @@ int main(void){
 
     //initialize lower layer stacks
     L2_initFSM(input_thisId);
-    L3_initFSM(input_destId);
+    L3_initFSM(input_thisId, input_destId);  // myId + destId both passed to L3
     
     while(1)
     {

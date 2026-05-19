@@ -1,7 +1,7 @@
 // 데이터 고정 길이는 가능, 포인터 사용 불가
 
 
-/* 
+/*
 === wanted data====
 
 1. 출석 시간 초과 Flag          CU -> Student
@@ -38,6 +38,17 @@
 #define TYPE_ATTENDANCE_TIMEOUT        0x10U   // CU -> Student
 #define TYPE_RSSI_INFO                 0x20U   // Student -> CU
 #define TYPE_ATTENDANCE_APPROVAL       0x30U   // CU -> Student
+#define TYPE_CHAT_MESSAGE              0x40U   // Student -> CU -> broadcast
+#define TYPE_STUDENT_LEAVE             0x50U   // Student -> CU: student is leaving
+
+/*
+========================================================
+ timeout_flag values for attendance_timeout_t
+========================================================
+*/
+#define TIMEOUT_FLAG_OPEN              0x00U   // attendance window just opened
+#define TIMEOUT_FLAG_WARNING           0x01U   // closing soon (5-min pre-deadline alert)
+#define TIMEOUT_FLAG_CLOSED            0x02U   // attendance window has closed
 
 /*
 ========================================================
@@ -66,7 +77,7 @@ typedef struct {
 /* 2. RSSI 위치 정보 (Student -> CU) */
 typedef struct {
     uint8_t student_id;     // 학생 구분
-    int16_t rssi_value;     // RSSI value
+    int16_t rssi_value;     // RSSI value (dBm), measured from last received CU signal
 } rssi_info_t;
 
 
@@ -76,8 +87,22 @@ typedef struct {
     uint8_t chat_enable;    // 0: deny, 1: allow
 } attendance_approval_t;
 
+
+/* 4. Chat message (Student -> CU -> broadcast) */
+// max 8 visible characters; message[] is null-terminated within 9 bytes
+typedef struct {
+    uint8_t student_id;     // sender's student ID
+    uint8_t message[9];     // null-terminated chat string (8 chars max)
+} chat_message_t;
+
+
+/* 5. Student leave notification (Student -> CU) */
+typedef struct {
+    uint8_t student_id;     // ID of the student who is leaving
+} student_leave_t;
+
 #pragma pack(pop)
-ㄴ
+
 
 /*
 ========================================================
@@ -104,14 +129,18 @@ static inline void makeAttendanceTimeoutPacket(
 
 
 /* 2. RSSI 정보 패킷 생성 */
+// student_id : the sending student's own L2 source ID
+// rssi       : RSSI (dBm) of the most recently received CU signal
 static inline void makeRSSIPacket(
     packet_data_t* packet,
+    uint8_t student_id,
     int16_t rssi
 )
 {
     rssi_info_t info;
 
-    info.rssi_value = rssi;
+    info.student_id  = student_id;   // fixed: was missing in original
+    info.rssi_value  = rssi;
 
     packet->mode = PACKET_MODE_STUDENT_TO_CU;
     packet->type_id = TYPE_RSSI_INFO;
@@ -135,6 +164,47 @@ static inline void makeAttendanceApprovalPacket(
 
     packet->mode = PACKET_MODE_CU_TO_STUDENT;
     packet->type_id = TYPE_ATTENDANCE_APPROVAL;
+
+    memset(packet->data, 0, sizeof(packet->data));
+    memcpy(packet->data, &info, sizeof(info));
+}
+
+
+/* 4. Chat message packet creation (Student -> CU) */
+// student_id : sender's own L2 source ID
+// msg        : null-terminated string; truncated to 8 visible characters
+static inline void makeChatPacket(
+    packet_data_t* packet,
+    uint8_t student_id,
+    const char* msg
+)
+{
+    chat_message_t info;
+
+    info.student_id = student_id;
+    memset(info.message, 0, sizeof(info.message));
+    strncpy((char*)info.message, msg, sizeof(info.message) - 1);
+
+    packet->mode    = PACKET_MODE_STUDENT_TO_CU;
+    packet->type_id = TYPE_CHAT_MESSAGE;
+
+    memset(packet->data, 0, sizeof(packet->data));
+    memcpy(packet->data, &info, sizeof(info));
+}
+
+
+/* 5. Student leave notification packet (Student -> CU) */
+static inline void makeStudentLeavePacket(
+    packet_data_t* packet,
+    uint8_t student_id
+)
+{
+    student_leave_t info;
+
+    info.student_id = student_id;
+
+    packet->mode    = PACKET_MODE_STUDENT_TO_CU;
+    packet->type_id = TYPE_STUDENT_LEAVE;
 
     memset(packet->data, 0, sizeof(packet->data));
     memcpy(packet->data, &info, sizeof(info));

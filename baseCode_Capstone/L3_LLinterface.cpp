@@ -6,7 +6,8 @@
 
 static uint8_t rcvdMsg[L3_MAXDATASIZE];
 static uint8_t rcvdSize;
-static int16_t rcvdRssi;
+static int16_t rcvdRssi = -120;  // initialized to clearly-out-of-range value
+                                  // so students not yet in range cannot be auto-approved
 static int8_t rcvdSnr;
 static uint8_t rcvdSrcId;
 
