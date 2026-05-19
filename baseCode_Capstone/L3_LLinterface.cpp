@@ -4,6 +4,8 @@
 #include "protocol_parameters.h"
 #include "time.h"
 
+# define CU_ID 0
+
 static uint8_t rcvdMsg[L3_MAXDATASIZE];
 static uint8_t rcvdSize;
 static int16_t rcvdRssi = -120;  // initialized to clearly-out-of-range value
@@ -78,39 +80,52 @@ int16_t L3_LLI_getRssi(void)
 
 void L3_LLI_sendPacket(packet_data_t* pkt)
 {
-    uint8_t destId;
+    uint8_t destId = 0;
 
+    // -----------------------------
+    // Routing decision (ONLY here)
+    // -----------------------------
     switch (pkt->mode)
     {
-        // Student -> CU
-        case MODE_TO_CU:
+        // Student → CU (always fixed destination)
+        case PACKET_MODE_STUDENT_TO_CU:
         {
             destId = CU_ID;
             break;
         }
 
-        // CU -> all Students
-        case MODE_FROM_CU:
+        // CU → Student(s)
+        case PACKET_MODE_CU_TO_STUDENT:
         {
-            destId = L2_BROADCAST_ID;
+            // student_id must be embedded in packet payload
+            presence_t* pres = (presence_t*)pkt->data;
+
+            destId = pres->student_id;
+
             break;
         }
 
         default:
         {
             debug_if(DBGMSG_L3,
-                     "[L3] invalid packet mode : %lu\n",
+                     "[L3] invalid packet mode: %lu\n",
                      (unsigned long)pkt->mode);
             return;
         }
     }
 
+    // -----------------------------
+    // Debug info
+    // -----------------------------
     debug_if(DBGMSG_L3,
              "[L3] SEND type:%lu mode:%lu dest:%u\n",
              (unsigned long)pkt->type_id,
              (unsigned long)pkt->mode,
              destId);
 
+    // -----------------------------
+    // Send down to L2
+    // -----------------------------
     L3_LLI_dataReqFunc((uint8_t*)pkt,
                        sizeof(packet_data_t),
                        destId);

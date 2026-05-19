@@ -233,7 +233,7 @@ void L3_FSMrun(void)
 
                 switch (pkt->type_id)
                 {
-                    case TYPE_RSSI_INFO:
+                    case TYPE_RSSI_INFO:  //L2_LLI_getRssi() 활용 생각할 것
                     {
                         // student is reporting its measured RSSI of the last CU signal
                         rssi_info_t* info = (rssi_info_t*)pkt->data;
@@ -258,7 +258,7 @@ void L3_FSMrun(void)
                         }
                         break;
                     }
-                    // 여기부터 수정 필요. chatting은 CU로 올 필요가 없기 때문. L2_LLI_getRssi() 활용 생각할 것
+                    // 여기부터 수정 필요. chatting은 CU로 올 필요가 없기 때문.
                     case TYPE_CHAT_MESSAGE:
                     {
                         // student is sending a chat message (also acts as chat-join request)
