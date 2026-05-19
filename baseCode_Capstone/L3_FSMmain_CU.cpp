@@ -258,7 +258,7 @@ void L3_FSMrun(void)
                         }
                         break;
                     }
-
+                    // 여기부터 수정 필요. chatting은 CU로 올 필요가 없기 때문
                     case TYPE_CHAT_MESSAGE:
                     {
                         // student is sending a chat message (also acts as chat-join request)

@@ -38,8 +38,7 @@
 #define TYPE_ATTENDANCE_TIMEOUT        0x10U   // CU -> Student
 #define TYPE_RSSI_INFO                 0x20U   // Student -> CU
 #define TYPE_ATTENDANCE_APPROVAL       0x30U   // CU -> Student
-#define TYPE_CHAT_MESSAGE              0x40U   // Student -> CU -> broadcast
-#define TYPE_STUDENT_LEAVE             0x50U   // Student -> CU: student is leaving
+
 
 /*
 ========================================================
@@ -168,48 +167,6 @@ static inline void makeAttendanceApprovalPacket(
     memset(packet->data, 0, sizeof(packet->data));
     memcpy(packet->data, &info, sizeof(info));
 }
-
-
-/* 4. Chat message packet creation (Student -> CU) */
-// student_id : sender's own L2 source ID
-// msg        : null-terminated string; truncated to 8 visible characters
-static inline void makeChatPacket(
-    packet_data_t* packet,
-    uint8_t student_id,
-    const char* msg
-)
-{
-    chat_message_t info;
-
-    info.student_id = student_id;
-    memset(info.message, 0, sizeof(info.message));
-    strncpy((char*)info.message, msg, sizeof(info.message) - 1);
-
-    packet->mode    = PACKET_MODE_STUDENT_TO_CU;
-    packet->type_id = TYPE_CHAT_MESSAGE;
-
-    memset(packet->data, 0, sizeof(packet->data));
-    memcpy(packet->data, &info, sizeof(info));
-}
-
-
-/* 5. Student leave notification packet (Student -> CU) */
-static inline void makeStudentLeavePacket(
-    packet_data_t* packet,
-    uint8_t student_id
-)
-{
-    student_leave_t info;
-
-    info.student_id = student_id;
-
-    packet->mode    = PACKET_MODE_STUDENT_TO_CU;
-    packet->type_id = TYPE_STUDENT_LEAVE;
-
-    memset(packet->data, 0, sizeof(packet->data));
-    memcpy(packet->data, &info, sizeof(info));
-}
-
 
 /*
 ====================================================================
