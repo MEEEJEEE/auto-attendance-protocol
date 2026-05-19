@@ -36,7 +36,7 @@
 ========================================================
 */
 #define TYPE_ATTENDANCE_TIMEOUT        0x10U   // CU -> Student
-#define TYPE_RSSI_INFO                 0x20U   // Student -> CU
+#define TYPE_PRESENCE                  0x20U   // Student -> CU
 #define TYPE_ATTENDANCE_APPROVAL       0x30U   // CU -> Student
 
 
@@ -73,11 +73,10 @@ typedef struct {
 } attendance_timeout_t;
 
 
-/* 2. RSSI 위치 정보 (Student -> CU) */
+/* 2. RSSI 위치 정보 (Student -> CU) CU에서 L2_LLI_getRssi로 판단 가능하므로 student는 시그널만 보냄*/
 typedef struct {
     uint8_t student_id;     // 학생 구분
-    int16_t rssi_value;     // RSSI value (dBm), measured from last received CU signal
-} rssi_info_t;
+} presence_t;
 
 
 /* 3. 출석 승인 및 채팅 승인 (CU -> Student) */
@@ -86,19 +85,6 @@ typedef struct {
     uint8_t chat_enable;    // 0: deny, 1: allow
 } attendance_approval_t;
 
-
-/* 4. Chat message (Student -> CU -> broadcast) */
-// max 8 visible characters; message[] is null-terminated within 9 bytes
-typedef struct {
-    uint8_t student_id;     // sender's student ID
-    uint8_t message[9];     // null-terminated chat string (8 chars max)
-} chat_message_t;
-
-
-/* 5. Student leave notification (Student -> CU) */
-typedef struct {
-    uint8_t student_id;     // ID of the student who is leaving
-} student_leave_t;
 
 #pragma pack(pop)
 
@@ -127,10 +113,10 @@ static inline void makeAttendanceTimeoutPacket(
 }
 
 
-/* 2. RSSI 정보 패킷 생성 */
+/* 2. 위치 정보 패킷 생성 */
 // student_id : the sending student's own L2 source ID
-// rssi       : RSSI (dBm) of the most recently received CU signal
-static inline void makeRSSIPacket(
+// student는 RSSI를 판단하지 않고 위치 정보만 보냄. CU 단에서 위치 정보 기반으로 RSSI 도출
+static inline void makePresencePacket(
     packet_data_t* packet,
     uint8_t student_id,
     int16_t rssi
@@ -142,7 +128,7 @@ static inline void makeRSSIPacket(
     info.rssi_value  = rssi;
 
     packet->mode = PACKET_MODE_STUDENT_TO_CU;
-    packet->type_id = TYPE_RSSI_INFO;
+    packet->type_id = TYPE_PRESENCE;
 
     memset(packet->data, 0, sizeof(packet->data));
     memcpy(packet->data, &info, sizeof(info));
@@ -167,45 +153,3 @@ static inline void makeAttendanceApprovalPacket(
     memset(packet->data, 0, sizeof(packet->data));
     memcpy(packet->data, &info, sizeof(info));
 }
-
-/*
-====================================================================
-RX SIDE EXAMPLE
-====================================================================
-
-Received:
-uint8_t* dataPtr
-
-Convert received buffer into packet structure:
-
-packet_data_t* packet =
-    (packet_data_t*)dataPtr;
-
-Check packet type:
-
-switch(packet->type_id)
-{
-    case TYPE_RSSI_INFO:
-    {
-        rssi_info_t* rssi =
-            (rssi_info_t*)packet->data;
-
-        int16_t value = rssi->rssi_value;
-        break;
-    }
-
-    case TYPE_ATTENDANCE_TIMEOUT:
-    {
-        attendance_timeout_t* info =
-            (attendance_timeout_t*)packet->data;
-
-        if(info->timeout_flag)
-        {
-            // attendance closed
-        }
-        break;
-    }
-}
-*/
-
-#endif

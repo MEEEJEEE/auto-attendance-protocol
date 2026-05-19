@@ -73,3 +73,45 @@ int16_t L3_LLI_getRssi(void)
 {
     return rcvdRssi;
 }
+
+// ===== for L3_convertPacket.h sending === 
+
+void L3_LLI_sendPacket(packet_data_t* pkt)
+{
+    uint8_t destId;
+
+    switch (pkt->mode)
+    {
+        // Student -> CU
+        case MODE_TO_CU:
+        {
+            destId = CU_ID;
+            break;
+        }
+
+        // CU -> all Students
+        case MODE_FROM_CU:
+        {
+            destId = L2_BROADCAST_ID;
+            break;
+        }
+
+        default:
+        {
+            debug_if(DBGMSG_L3,
+                     "[L3] invalid packet mode : %lu\n",
+                     (unsigned long)pkt->mode);
+            return;
+        }
+    }
+
+    debug_if(DBGMSG_L3,
+             "[L3] SEND type:%lu mode:%lu dest:%u\n",
+             (unsigned long)pkt->type_id,
+             (unsigned long)pkt->mode,
+             destId);
+
+    L3_LLI_dataReqFunc((uint8_t*)pkt,
+                       sizeof(packet_data_t),
+                       destId);
+}
