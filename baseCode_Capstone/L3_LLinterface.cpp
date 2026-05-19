@@ -1,6 +1,7 @@
 #include "mbed.h"
 #include "L3_FSMevent.h"
 #include "L3_msg.h"
+#include "L3_convertPacket.h"
 #include "protocol_parameters.h"
 #include "time.h"
 
@@ -97,11 +98,31 @@ void L3_LLI_sendPacket(packet_data_t* pkt)
         // CU → Student(s)
         case PACKET_MODE_CU_TO_STUDENT:
         {
-            // student_id must be embedded in packet payload
-            presence_t* pres = (presence_t*)pkt->data;
-
-            destId = pres->student_id;
-
+            // 수정: 패킷 타입에 따라 브로드캐스트/유니캐스트 분기
+            // - TYPE_ATTENDANCE_TIMEOUT  : 전체 브로드캐스트 (모든 학생 대상)
+            // - TYPE_ATTENDANCE_APPROVAL : 특정 학생에게 유니캐스트
+            //   (이전 버그: presence_t*로 캐스팅해 student_id를 읽었으나
+            //    approval/timeout 패킷에는 presence_t 구조체가 없어 잘못된 값 참조)
+            if (pkt->type_id == TYPE_ATTENDANCE_TIMEOUT)
+            {
+                // 출석 시간 알림(OPEN/WARNING/CLOSED)은 전체 브로드캐스트
+                destId = L3_BROADCAST_ID;
+            }
+            else if (pkt->type_id == TYPE_ATTENDANCE_APPROVAL)
+            {
+                // 출석 승인 패킷은 대상 학생에게만 유니캐스트
+                // attendance_approval_t.student_id 필드로 목적지 결정
+                attendance_approval_t* approval = (attendance_approval_t*)pkt->data;
+                destId = approval->student_id;
+            }
+            else
+            {
+                // 알 수 없는 CU→Student 타입: 안전하게 브로드캐스트로 폴백
+                debug_if(DBGMSG_L3,
+                         "[L3] unknown CU_TO_STUDENT type_id 0x%02X, fallback to broadcast\n",
+                         (unsigned)pkt->type_id);
+                destId = L3_BROADCAST_ID;
+            }
             break;
         }
 

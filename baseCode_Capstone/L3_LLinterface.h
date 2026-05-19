@@ -1,3 +1,8 @@
+#ifndef L3_LLINTERFACE_H
+#define L3_LLINTERFACE_H
+
+#include "L3_convertPacket.h"
+
 extern void (*L3_LLI_dataReqFunc)(uint8_t* msg, uint8_t size, uint8_t destId);
 
 void     L3_LLI_dataInd(uint8_t* dataPtr, uint8_t srcId, uint8_t size, int8_t snr, int16_t rssi);
@@ -13,3 +18,5 @@ void     L3_LLI_reconfigSrcIdCnf(uint8_t res);
 
 // ==== for L3_convertPacket.h ====
 void L3_LLI_sendPacket(packet_data_t* pkt);
+
+#endif // L3_LLINTERFACE_H

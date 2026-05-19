@@ -10,12 +10,16 @@
 // Matches docs/FSM_design.md section "1. Control Unit FSM"
 //
 //   0 WAIT   : before class starts; waiting for operator "start" command
-//   1 OPEN   : attendance window active; LOCATION and CHAT packets handled
+//   1 OPEN   : attendance window active; PRESENCE packets handled
 //   2 CLOSED : window expired; session ended; late packets discarded
 // ---------------------------------------------------------------------------
 #define L3STATE_WAIT    0
 #define L3STATE_OPEN    1
 #define L3STATE_CLOSED  2
+
+// 수정: RSSI 다중 측정 평균을 위한 샘플 수 설정
+// 학생 1명당 이 횟수만큼 RSSI를 수신한 후 평균값으로 출석 여부를 판단
+#define L3_RSSI_SAMPLE_COUNT    3
 
 // state variables
 static uint8_t main_state = L3STATE_WAIT;
@@ -32,8 +36,14 @@ static uint8_t inputWordLen = 0;
 static packet_data_t txPacket;
 
 // per-student attendance table indexed by L2 source ID [0 .. L3_MAX_STUDENTS-1]
-// 1 = present (TYPE_RSSI_INFO received with rssi_value >= L3_RSSI_THRESHOLD), 0 = absent
+// 1 = present (TYPE_PRESENCE received with L2 RSSI >= L3_RSSI_THRESHOLD), 0 = absent
 static uint8_t attendanceTable[L3_MAX_STUDENTS];
+
+// 수정: 학생별 RSSI 다중 측정 평균을 위한 누적 변수
+// rssiSum[]   : 학생별 RSSI 수신값의 누적 합 (int32_t로 오버플로 방지)
+// rssiCount[] : 학생별 RSSI 수신 횟수
+static int32_t rssiSum[L3_MAX_STUDENTS];
+static uint8_t rssiCount[L3_MAX_STUDENTS];
 
 
 // ---------------------------------------------------------------------------
@@ -47,18 +57,20 @@ static uint8_t attendanceTable[L3_MAX_STUDENTS];
 static void L3_CU_broadcastTimeout(uint8_t flag)
 {
     makeAttendanceTimeoutPacket(&txPacket, flag);
-    L3_LLI_dataReqFunc((uint8_t*)&txPacket, sizeof(packet_data_t), L3_BROADCAST_ID);
+    L3_LLI_sendPacket(&txPacket);
 }
 
 // Send a TYPE_ATTENDANCE_APPROVAL packet unicast to a specific student.
 // attendance_ok : 1 = approved, 0 = rejected
 // chat_enable   : 1 = student may join chat, 0 = chat not yet allowed
+// 수정: makeAttendanceApprovalPacket에 student_id 인자 추가
+//       L3_LLI_sendPacket이 패킷 내 student_id를 읽어 유니캐스트 라우팅
 static void L3_CU_sendApproval(uint8_t studentId,
                                 uint8_t attendance_ok,
                                 uint8_t chat_enable)
 {
-    makeAttendanceApprovalPacket(&txPacket, attendance_ok, chat_enable);
-    L3_LLI_dataReqFunc((uint8_t*)&txPacket, sizeof(packet_data_t), studentId);
+    makeAttendanceApprovalPacket(&txPacket, studentId, attendance_ok, chat_enable);
+    L3_LLI_sendPacket(&txPacket);
 }
 
 // Mark the given student as present if not already recorded, and log it.
@@ -136,6 +148,10 @@ void L3_initFSM(uint8_t myId, uint8_t destId)
 
     memset(attendanceTable, 0, sizeof(attendanceTable));
 
+    // 수정: RSSI 다중 측정 평균 변수 초기화
+    memset(rssiSum,   0, sizeof(rssiSum));
+    memset(rssiCount, 0, sizeof(rssiCount));
+
     pc.attach(&L3service_processInputWord, Serial::RxIrq);
 
     pc.printf("[CU] Initialized. Type 'start' to open the attendance window.\n");
@@ -166,7 +182,7 @@ void L3_FSMrun(void)
                 if (strcmp((char*)inputWord, "start") == 0)
                 {
                     // event a: class start time reached
-                    // Action 1: activate attendance collection and LOCATION/CHAT reception
+                    // Action 1: activate attendance collection and PRESENCE reception
                     pc.printf("[CU] Attendance window OPEN (%i sec).\n",
                               L3_ATTEND_WINDOW_SEC);
 
@@ -196,11 +212,9 @@ void L3_FSMrun(void)
         //   attendDeadline   (event b) : close window, broadcast CLOSED notification
         //   preDeadlineAlert           : broadcast WARNING notification
         //   msgRcvd                    : route by packet type_id
-        //     TYPE_RSSI_INFO    -> compare rssi_value with threshold
-        //                          if inside: mark present + unicast approval
-        //                          if outside: send rejection so student stays in IDLE
-        //     TYPE_CHAT_MESSAGE -> enable chat for sender + broadcast to all students
-        //     TYPE_STUDENT_LEAVE-> log the leave; attendance already recorded, no change
+        //     TYPE_PRESENCE -> L2_LLI_getRssi()로 RSSI 측정, N회 평균 후 임계값 비교
+        //                      평균 RSSI >= 임계값: mark present + unicast approval
+        //                      평균 RSSI <  임계값: send rejection so student stays in IDLE
         // -------------------------------------------------------------------
         case L3STATE_OPEN:
 
@@ -231,60 +245,74 @@ void L3_FSMrun(void)
                 uint8_t        srcId   = L3_LLI_getSrcId();
                 packet_data_t* pkt     = (packet_data_t*)dataPtr;
 
+                (void)size;
+
                 switch (pkt->type_id)
                 {
-                    case TYPE_RSSI_INFO:  //L2_LLI_getRssi() 활용 생각할 것
+                    // 수정: TYPE_RSSI_INFO → TYPE_PRESENCE 로 변경
+                    //       RSSI를 패킷 페이로드에서 읽지 않고
+                    //       L3_LLI_getRssi()로 L2 레이어에서 직접 측정
+                    //       (주석 "L2_LLI_getRssi() 활용 생각할 것" 반영)
+                    case TYPE_PRESENCE:
                     {
-                        // student is reporting its measured RSSI of the last CU signal
-                        rssi_info_t* info = (rssi_info_t*)pkt->data;
-                        int16_t rssi = info->rssi_value;
+                        // 학생이 위치 신호를 보냄: CU에서 L2 RSSI를 직접 읽어 판단
+                        int16_t rssi = L3_LLI_getRssi();
 
                         debug_if(DBGMSG_L3,
-                                 "[L3] TYPE_RSSI_INFO from student %i, rssi=%i dBm\n",
+                                 "[L3] TYPE_PRESENCE from student %i, rssi=%i dBm\n",
                                  srcId, rssi);
 
-                        if (rssi >= L3_RSSI_THRESHOLD)
+                        if (srcId < L3_MAX_STUDENTS)
                         {
-                            // student is inside the classroom: mark present and approve
-                            L3_CU_markPresent(srcId);
+                            // 수정: RSSI 다중 측정 평균 로직
+                            // L3_RSSI_SAMPLE_COUNT 회 수신 후 평균값으로 출석 판단
+                            rssiSum[srcId]  += rssi;
+                            rssiCount[srcId]++;
+
+                            pc.printf("[CU] Student %i RSSI=%i dBm 수신 (%u/%u 샘플)\n",
+                                      srcId, rssi,
+                                      (unsigned)rssiCount[srcId],
+                                      (unsigned)L3_RSSI_SAMPLE_COUNT);
+
+                            if (rssiCount[srcId] >= L3_RSSI_SAMPLE_COUNT)
+                            {
+                                // 충분한 샘플 수집 완료 → 평균 RSSI 계산
+                                int16_t avgRssi = (int16_t)(rssiSum[srcId] / rssiCount[srcId]);
+
+                                pc.printf("[CU] Student %i 평균 RSSI=%i dBm (임계값=%i dBm)\n",
+                                          srcId, avgRssi, L3_RSSI_THRESHOLD);
+
+                                if (avgRssi >= L3_RSSI_THRESHOLD)
+                                {
+                                    // 강의실 내 위치 확인 → 출석 승인
+                                    L3_CU_markPresent(srcId);
+                                }
+                                else
+                                {
+                                    // 평균 RSSI가 임계값 미만 → 강의실 외부로 판단, 출석 거부
+                                    debug_if(DBGMSG_L3,
+                                             "[L3] Student %i avgRSSI=%i below threshold, outside.\n",
+                                             srcId, avgRssi);
+                                    pc.printf("[CU] Student %i 출석 거부 (평균 RSSI %i < 임계값 %i)\n",
+                                              srcId, avgRssi, L3_RSSI_THRESHOLD);
+                                    L3_CU_sendApproval(srcId, 0, 0);
+                                }
+
+                                // 다음 측정 세션을 위해 누적값 초기화
+                                rssiSum[srcId]  = 0;
+                                rssiCount[srcId] = 0;
+                            }
                         }
-                        else
-                        {
-                            // student is outside the classroom: send rejection
-                            debug_if(DBGMSG_L3,
-                                     "[L3] Student %i RSSI=%i below threshold, outside.\n",
-                                     srcId, rssi);
-                            L3_CU_sendApproval(srcId, 0, 0);
-                        }
-                        break;
-                    }
-                    // 여기부터 수정 필요. chatting은 CU로 올 필요가 없기 때문.
-                    case TYPE_CHAT_MESSAGE:
-                    {
-                        // student is sending a chat message (also acts as chat-join request)
-                        // enable chat for this student and broadcast the message to all
-                        chat_message_t* chat = (chat_message_t*)pkt->data;
-
-                        debug_if(DBGMSG_L3,
-                                 "[L3] TYPE_CHAT_MESSAGE from student %i\n", srcId);
-                        pc.printf("[CHAT] Student %i: %s\n", srcId, chat->message);
-
-                        // grant chat permission to the sender
-                        L3_CU_sendApproval(srcId, 1, 1);
-
-                        // rebroadcast the original packet so all students receive it
-                        L3_LLI_dataReqFunc(dataPtr, size, L3_BROADCAST_ID);
                         break;
                     }
 
-                    case TYPE_STUDENT_LEAVE:
-                    {
-                        // student is leaving the classroom; attendance is already recorded
-                        student_leave_t* leave = (student_leave_t*)pkt->data;
-                        pc.printf("[CU] Student %i leaving (attendance retained).\n",
-                                  leave->student_id);
-                        break;
-                    }
+                    // 수정: TYPE_CHAT_MESSAGE case 제거
+                    // 채팅은 CU를 거칠 필요가 없으므로 해당 case 삭제
+                    // (원래 주석 "여기부터 수정 필요. chatting은 CU로 올 필요가 없기 때문." 반영)
+                    // → 학생 간 채팅은 직접 브로드캐스트 방식으로 변경됨
+
+                    // 수정: TYPE_STUDENT_LEAVE case 제거
+                    // L3_convertPacket.h에서 해당 패킷 타입이 제거되었으므로 삭제
 
                     default:
                         debug_if(DBGMSG_L3,

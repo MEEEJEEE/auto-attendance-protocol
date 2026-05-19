@@ -8,8 +8,7 @@
 //FSM state -------------------------------------------------
 #define L3STATE_IDLE                0
 #define L3STATE_ATTEND              1
-#define L3STATE_CHAT                2
-#define L3STATE_LEAVE               3
+#define L3STATE_LEAVE               2   // 수정: CHAT 상태 제거 (채팅 기능 CU 미경유로 변경됨)
 
 
 //state variables
@@ -78,17 +77,19 @@ void L3_FSMrun(void)
         case L3STATE_IDLE:
         // 학생 대기 상태
         // - msgRcvd     : CU 브로드캐스트 처리
-        //                 TYPE_ATTENDANCE_TIMEOUT(OPEN)    -> RSSI 자동 송신
+        //                 TYPE_ATTENDANCE_TIMEOUT(OPEN)    -> 위치 신호 자동 송신
         //                 TYPE_ATTENDANCE_TIMEOUT(WARNING) -> 경고 출력
         //                 TYPE_ATTENDANCE_TIMEOUT(CLOSED)  -> 마감 출력
         //                 TYPE_ATTENDANCE_APPROVAL(ok=1)   -> ATTEND 전이
-        // - dataToSend  : 수동 RSSI 송신
+        // - dataToSend  : 수동 위치 신호 송신 (Enter 입력 시)
         // =====================================================
             if (L3_event_checkEventFlag(L3_event_msgRcvd))
             {
                 uint8_t*       dataPtr = L3_LLI_getMsgPtr();
                 uint8_t        size    = L3_LLI_getSize();
                 packet_data_t* pkt     = (packet_data_t*)dataPtr;
+
+                (void)size;
 
                 debug_if(DBGMSG_L3, "\n[L3][IDLE] RCVD type_id=0x%02X (len:%i)\n",
                          (unsigned)pkt->type_id, size);
@@ -101,13 +102,14 @@ void L3_FSMrun(void)
 
                         if (info->timeout_flag == TIMEOUT_FLAG_OPEN)
                         {
-                            // CU opened the window: automatically send RSSI to check in
+                            // 출석 창 열림: 위치 신호(TYPE_PRESENCE)를 CU에 자동 전송
+                            // 수정: makeRSSIPacket → makePresencePacket 으로 변경
+                            //       CU가 L3_LLI_getRssi()로 RSSI를 직접 읽으므로
+                            //       학생은 student_id만 포함한 신호를 보내면 됨
                             pc.printf("[IDLE] 출석 창이 열렸습니다. 위치 신호를 자동 전송합니다.\n");
-                            int16_t rssi = L3_LLI_getRssi();   // RSSI of this CU broadcast
-                            makeRSSIPacket(&txPacket, myId, rssi);
-                            L3_LLI_dataReqFunc((uint8_t*)&txPacket,
-                                               sizeof(packet_data_t), myDestId);
-                            pc.printf("[IDLE] RSSI=%i dBm 전송 완료. 승인 대기 중...\n", rssi);
+                            makePresencePacket(&txPacket, myId);
+                            L3_LLI_sendPacket(&txPacket);
+                            pc.printf("[IDLE] 위치 신호 전송 완료. 승인 대기 중...\n");
                         }
                         else if (info->timeout_flag == TIMEOUT_FLAG_WARNING)
                         {
@@ -130,7 +132,7 @@ void L3_FSMrun(void)
                         {
                             // CU approved attendance -> advance to ATTEND
                             pc.printf("[IDLE] 승인 수신 -> ATTEND 상태로 이동\n");
-                            pc.printf("[ATTEND] 채팅 요청 메시지를 입력하세요 : ");
+                            pc.printf("[ATTEND] 출석이 확인되었습니다. 'LEAVE' 입력 시 종료합니다.\n");
                             main_state = L3STATE_ATTEND;
                         }
                         else
@@ -152,15 +154,14 @@ void L3_FSMrun(void)
             }
             else if (L3_event_checkEventFlag(L3_event_dataToSend))
             {
-                // manual location send triggered by operator pressing Enter
-                int16_t rssi = L3_LLI_getRssi();
-                makeRSSIPacket(&txPacket, myId, rssi);
-                debug_if(DBGMSG_L3, "[L3][IDLE] sending RSSI=%i dBm (len:%i)\n",
-                         rssi, (int)sizeof(packet_data_t));
-                L3_LLI_dataReqFunc((uint8_t*)&txPacket,
-                                   sizeof(packet_data_t), myDestId);
+                // 수동 위치 신호 전송: Enter 입력 시 즉시 CU에 위치 신호 전송
+                // 수정: makeRSSIPacket → makePresencePacket 으로 변경 (rssi 파라미터 제거)
+                makePresencePacket(&txPacket, myId);
+                debug_if(DBGMSG_L3, "[L3][IDLE] sending presence signal (len:%i)\n",
+                         (int)sizeof(packet_data_t));
+                L3_LLI_sendPacket(&txPacket);
 
-                pc.printf("[IDLE] 위치 정보 전송 완료 (RSSI=%i). 승인 대기 중...\n", rssi);
+                pc.printf("[IDLE] 위치 정보 전송 완료. 승인 대기 중...\n");
                 wordLen = 0;
 
                 L3_event_clearEventFlag(L3_event_dataToSend);
@@ -169,11 +170,12 @@ void L3_FSMrun(void)
 
         // =====================================================
         case L3STATE_ATTEND:
-        // 출석 확인 상태
-        // - msgRcvd     : TYPE_ATTENDANCE_APPROVAL(chat_enable=1) -> CHAT
-        //                 TYPE_ATTENDANCE_TIMEOUT(CLOSED)         -> IDLE
-        //                 TYPE_CHAT_MESSAGE                       -> 메시지 출력
-        // - dataToSend  : 채팅 참여 요청 메시지 전송
+        // 출석 확인 완료 상태
+        // - msgRcvd     : TYPE_ATTENDANCE_TIMEOUT(CLOSED)  -> IDLE 복귀
+        //                 TYPE_ATTENDANCE_TIMEOUT(WARNING) -> 경고 출력
+        // - dataToSend  : 'LEAVE' 입력 시 LEAVE 상태로 이동
+        // 수정: TYPE_CHAT_MESSAGE case 제거 (채팅은 CU 경유 불필요 → 직접 통신)
+        //       makeChatPacket 호출 제거 (L3_convertPacket.h에서 삭제됨)
         // =====================================================
             if (L3_event_checkEventFlag(L3_event_msgRcvd))
             {
@@ -181,25 +183,13 @@ void L3_FSMrun(void)
                 uint8_t        size    = L3_LLI_getSize();
                 packet_data_t* pkt     = (packet_data_t*)dataPtr;
 
+                (void)size;
+
                 debug_if(DBGMSG_L3, "\n[L3][ATTEND] RCVD type_id=0x%02X (len:%i)\n",
                          (unsigned)pkt->type_id, size);
 
                 switch (pkt->type_id)
                 {
-                    case TYPE_ATTENDANCE_APPROVAL:
-                    {
-                        attendance_approval_t* approval = (attendance_approval_t*)pkt->data;
-
-                        if (approval->chat_enable == 1)
-                        {
-                            // CU enabled chat -> enter CHAT state
-                            pc.printf("[ATTEND] 채팅 승인 -> CHAT 상태로 이동\n");
-                            pc.printf("[CHAT] 메시지를 입력하세요 (종료하려면 'LEAVE' 입력) : ");
-                            main_state = L3STATE_CHAT;
-                        }
-                        break;
-                    }
-
                     case TYPE_ATTENDANCE_TIMEOUT:
                     {
                         attendance_timeout_t* info = (attendance_timeout_t*)pkt->data;
@@ -218,15 +208,6 @@ void L3_FSMrun(void)
                         break;
                     }
 
-                    case TYPE_CHAT_MESSAGE:
-                    {
-                        // display a chat message received while in ATTEND state
-                        chat_message_t* chat = (chat_message_t*)pkt->data;
-                        pc.printf("\n[CHAT] Student %i: %s\n", chat->student_id, chat->message);
-                        pc.printf("[ATTEND] 채팅 요청 메시지를 입력하세요 : ");
-                        break;
-                    }
-
                     default:
                         debug_if(DBGMSG_L3,
                                  "[L3][ATTEND] unhandled type_id=0x%02X, ignoring.\n",
@@ -238,100 +219,20 @@ void L3_FSMrun(void)
             }
             else if (L3_event_checkEventFlag(L3_event_dataToSend))
             {
-                // send the typed text as a TYPE_CHAT_MESSAGE (acts as chat join request)
-                // CU will respond with chat_enable=1 -> transition to CHAT
-                makeChatPacket(&txPacket, myId, (char*)originalWord);
-                debug_if(DBGMSG_L3, "[L3][ATTEND] sending chat request : %s (len:%i)\n",
-                         originalWord, (int)sizeof(packet_data_t));
-                L3_LLI_dataReqFunc((uint8_t*)&txPacket,
-                                   sizeof(packet_data_t), myDestId);
-
-                pc.printf("[ATTEND] 채팅 요청 전송 완료. 동일 반 확인 대기 중...\n");
-                wordLen = 0;
-
-                L3_event_clearEventFlag(L3_event_dataToSend);
-            }
-            break;
-
-        // =====================================================
-        case L3STATE_CHAT:
-        // 채팅 상태
-        // - msgRcvd     : TYPE_CHAT_MESSAGE               -> 수신 메시지 출력
-        //                 TYPE_ATTENDANCE_TIMEOUT(CLOSED) -> IDLE 복귀
-        //                 TYPE_ATTENDANCE_TIMEOUT(WARNING)-> 경고 출력
-        // - dataToSend  : 메시지 전송; "LEAVE" 입력 시 -> LEAVE 상태
-        // =====================================================
-            if (L3_event_checkEventFlag(L3_event_msgRcvd))
-            {
-                uint8_t*       dataPtr = L3_LLI_getMsgPtr();
-                uint8_t        size    = L3_LLI_getSize();
-                packet_data_t* pkt     = (packet_data_t*)dataPtr;
-
-                debug_if(DBGMSG_L3, "\n[L3][CHAT] RCVD type_id=0x%02X (len:%i)\n",
-                         (unsigned)pkt->type_id, size);
-
-                switch (pkt->type_id)
-                {
-                    case TYPE_CHAT_MESSAGE:
-                    {
-                        chat_message_t* chat = (chat_message_t*)pkt->data;
-                        pc.printf("\n[CHAT] Student %i: %s\n",
-                                  chat->student_id, chat->message);
-                        pc.printf("[CHAT] 메시지를 입력하세요 : ");
-                        break;
-                    }
-
-                    case TYPE_ATTENDANCE_TIMEOUT:
-                    {
-                        attendance_timeout_t* info = (attendance_timeout_t*)pkt->data;
-
-                        if (info->timeout_flag == TIMEOUT_FLAG_CLOSED)
-                        {
-                            // session ended; leave chat
-                            pc.printf("[CHAT] 출석 창이 닫혔습니다. IDLE로 복귀합니다.\n");
-                            L3_event_clearAllEventFlag();
-                            wordLen = 0;
-                            main_state = L3STATE_IDLE;
-                        }
-                        else if (info->timeout_flag == TIMEOUT_FLAG_WARNING)
-                        {
-                            pc.printf("[CHAT] ⚠ 출석 마감 5분 전입니다!\n");
-                        }
-                        break;
-                    }
-
-                    default:
-                        debug_if(DBGMSG_L3,
-                                 "[L3][CHAT] unhandled type_id=0x%02X, ignoring.\n",
-                                 (unsigned)pkt->type_id);
-                        break;
-                }
-
-                L3_event_clearEventFlag(L3_event_msgRcvd);
-            }
-            else if (L3_event_checkEventFlag(L3_event_dataToSend))
-            {
                 if (strcmp((char*)originalWord, "LEAVE") == 0)
                 {
-                    // 이탈 요청
-                    pc.printf("[CHAT] LEAVE 입력 -> LEAVE 상태로 이동\n");
+                    // 이탈 요청: LEAVE 상태로 전환
+                    pc.printf("[ATTEND] LEAVE 입력 -> LEAVE 상태로 이동\n");
                     wordLen = 0;
                     L3_event_clearEventFlag(L3_event_dataToSend);
                     main_state = L3STATE_LEAVE;
                 }
                 else
                 {
-                    // 일반 채팅 메시지 전송
-                    makeChatPacket(&txPacket, myId, (char*)originalWord);
-                    debug_if(DBGMSG_L3, "[L3][CHAT] sending : %s (len:%i)\n",
-                             originalWord, (int)sizeof(packet_data_t));
-                    L3_LLI_dataReqFunc((uint8_t*)&txPacket,
-                                       sizeof(packet_data_t), myDestId);
-
-                    pc.printf("[CHAT] 전송 완료.\n");
-                    pc.printf("[CHAT] 메시지를 입력하세요 (종료하려면 'LEAVE' 입력) : ");
+                    // 수정: 채팅 기능 제거로 인해 일반 텍스트 입력은 무시
+                    // (이전: makeChatPacket으로 채팅 요청 전송, 현재: 해당 패킷 타입 없음)
+                    pc.printf("[ATTEND] 출석 확인 완료 상태입니다. 종료하려면 'LEAVE'를 입력하세요.\n");
                     wordLen = 0;
-
                     L3_event_clearEventFlag(L3_event_dataToSend);
                 }
             }
@@ -340,15 +241,12 @@ void L3_FSMrun(void)
         // =====================================================
         case L3STATE_LEAVE:
         // 이탈 상태
-        // - send TYPE_STUDENT_LEAVE to CU, then return to IDLE
+        // 수정: makeStudentLeavePacket 제거 (L3_convertPacket.h에서 해당 타입 삭제됨)
+        //       패킷 전송 없이 IDLE로 복귀 (출석 기록은 CU에 이미 저장됨)
         // =====================================================
         {
-            // notify the CU that this student is leaving
-            makeStudentLeavePacket(&txPacket, myId);
-            L3_LLI_dataReqFunc((uint8_t*)&txPacket, sizeof(packet_data_t), myDestId);
-
-            debug_if(DBGMSG_L3, "[L3][LEAVE] leave notification sent\n");
-            pc.printf("[LEAVE] 이탈 위치 정보 전송 완료. IDLE로 복귀\n");
+            debug_if(DBGMSG_L3, "[L3][LEAVE] leaving, returning to IDLE\n");
+            pc.printf("[LEAVE] 이탈 처리 완료. IDLE로 복귀합니다.\n");
             pc.printf("[IDLE] 출석 창이 열릴 때까지 대기 중입니다.\n");
 
             L3_event_clearAllEventFlag();

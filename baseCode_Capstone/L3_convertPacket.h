@@ -79,8 +79,11 @@ typedef struct {
 } presence_t;
 
 
-/* 3. 출석 승인 및 채팅 승인 (CU -> Student) */
+/* 3. 출석 승인 및 채팅 승인 (CU -> Student)
+   수정: student_id 필드 추가 - L3_LLI_sendPacket이 유니캐스트 목적지를
+         패킷 페이로드에서 읽어 라우팅하기 위해 필요 */
 typedef struct {
+    uint8_t student_id;     // 수신 대상 학생 ID (L3_LLI_sendPacket 라우팅용)
     uint8_t attendance_ok;  // 0: fail, 1: success
     uint8_t chat_enable;    // 0: deny, 1: allow
 } attendance_approval_t;
@@ -116,16 +119,16 @@ static inline void makeAttendanceTimeoutPacket(
 /* 2. 위치 정보 패킷 생성 */
 // student_id : the sending student's own L2 source ID
 // student는 RSSI를 판단하지 않고 위치 정보만 보냄. CU 단에서 위치 정보 기반으로 RSSI 도출
+// 수정: rssi 파라미터 제거 (CU가 L2_LLI_getRssi()로 직접 측정하므로 불필요)
+//       rssi_info_t → presence_t 로 변경 (정의되지 않은 타입 사용 버그 수정)
 static inline void makePresencePacket(
     packet_data_t* packet,
-    uint8_t student_id,
-    int16_t rssi
+    uint8_t student_id
 )
 {
-    rssi_info_t info;
+    presence_t info;
 
-    info.student_id  = student_id;   // fixed: was missing in original
-    info.rssi_value  = rssi;
+    info.student_id = student_id;
 
     packet->mode = PACKET_MODE_STUDENT_TO_CU;
     packet->type_id = TYPE_PRESENCE;
@@ -136,16 +139,19 @@ static inline void makePresencePacket(
 
 
 /* 3. 출석 승인 및 채팅 승인 패킷 생성 */
+// 수정: student_id 파라미터 추가 (L3_LLI_sendPacket 유니캐스트 라우팅을 위해 패킷에 포함)
 static inline void makeAttendanceApprovalPacket(
     packet_data_t* packet,
+    uint8_t student_id,
     uint8_t attendance_ok,
     uint8_t chat_enable
 )
 {
     attendance_approval_t info;
 
+    info.student_id    = student_id;
     info.attendance_ok = attendance_ok;
-    info.chat_enable = chat_enable;
+    info.chat_enable   = chat_enable;
 
     packet->mode = PACKET_MODE_CU_TO_STUDENT;
     packet->type_id = TYPE_ATTENDANCE_APPROVAL;
@@ -153,3 +159,5 @@ static inline void makeAttendanceApprovalPacket(
     memset(packet->data, 0, sizeof(packet->data));
     memcpy(packet->data, &info, sizeof(info));
 }
+
+#endif // L3_CONVERTPACKET_H
