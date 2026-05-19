@@ -21,7 +21,6 @@ static uint8_t prev_state = main_state;
 static uint8_t originalWord[1030];
 static uint8_t wordLen = 0;
 
-<<<<<<< HEAD
 // outbound packet assembly buffer
 static packet_data_t txPacket;
 
@@ -29,13 +28,6 @@ static packet_data_t txPacket;
 static Serial pc(USBTX, USBRX);
 static uint8_t myDestId;   // CU's L2 ID
 static uint8_t myId;       // this student's own L2 ID
-=======
-static uint8_t sdu[1030];
-
-//serial port interface
-static Serial pc(USBTX, USBRX);
-static uint8_t myDestId;
->>>>>>> a4c5042e0d04a6c24d099222410441b65e324475
 
 //application event handler : generating SDU from keyboard input
 static void L3service_processInputWord(void)
@@ -63,23 +55,14 @@ static void L3service_processInputWord(void)
 }
 
 
-<<<<<<< HEAD
 void L3_initFSM(uint8_t id, uint8_t destId)
 {
     myId     = id;
-=======
-void L3_initFSM(uint8_t destId)
-{
->>>>>>> a4c5042e0d04a6c24d099222410441b65e324475
     myDestId = destId;
     //initialize service layer
     pc.attach(&L3service_processInputWord, Serial::RxIrq);
 
-<<<<<<< HEAD
     pc.printf("[IDLE] 출석 창이 열릴 때까지 대기 중입니다. Enter를 누르면 위치를 수동으로 전송합니다.\n");
-=======
-    pc.printf("[IDLE] 위치 정보를 입력하세요 : ");
->>>>>>> a4c5042e0d04a6c24d099222410441b65e324475
 }
 
 void L3_FSMrun(void)
@@ -95,7 +78,6 @@ void L3_FSMrun(void)
         // =====================================================
         case L3STATE_IDLE:
         // 학생 대기 상태
-<<<<<<< HEAD
         // - msgRcvd     : CU 브로드캐스트 처리
         //                 TYPE_ATTENDANCE_TIMEOUT(OPEN)    -> RSSI 자동 송신
         //                 TYPE_ATTENDANCE_TIMEOUT(WARNING) -> 경고 출력
@@ -165,36 +147,12 @@ void L3_FSMrun(void)
                                  "[L3][IDLE] unhandled type_id=0x%02X, ignoring.\n",
                                  (unsigned)pkt->type_id);
                         break;
-=======
-        // - dataToSend  : 위치 정보 송신
-        // - msgRcvd     : "APPROVE" 수신 시 → ATTEND
-        // =====================================================
-            if (L3_event_checkEventFlag(L3_event_msgRcvd))
-            {
-                uint8_t* dataPtr = L3_LLI_getMsgPtr();
-                uint8_t  size    = L3_LLI_getSize();
-
-                debug_if(DBGMSG_L3, "\n[L3][IDLE] RCVD : %s (length:%i)\n", dataPtr, size);
-
-                if (strncmp((char*)dataPtr, "APPROVE", 7) == 0)
-                {
-                    pc.printf("[IDLE] 승인 수신 -> ATTEND 상태로 이동\n");
-                    pc.printf("[ATTEND] 채팅 요청 메시지를 입력하세요 : ");
-                    main_state = L3STATE_ATTEND;
-                }
-                else
-                {
-                    // 승인이 아닌 다른 메시지는 출력 후 대기 유지
-                    pc.printf("[IDLE] 수신 : %s\n", dataPtr);
-                    pc.printf("[IDLE] 위치 정보를 입력하세요 : ");
->>>>>>> a4c5042e0d04a6c24d099222410441b65e324475
                 }
 
                 L3_event_clearEventFlag(L3_event_msgRcvd);
             }
             else if (L3_event_checkEventFlag(L3_event_dataToSend))
             {
-<<<<<<< HEAD
                 // manual location send triggered by operator pressing Enter
                 int16_t rssi = L3_LLI_getRssi();
                 makeRSSIPacket(&txPacket, myId, rssi);
@@ -204,14 +162,6 @@ void L3_FSMrun(void)
                                    sizeof(packet_data_t), myDestId);
 
                 pc.printf("[IDLE] 위치 정보 전송 완료 (RSSI=%i). 승인 대기 중...\n", rssi);
-=======
-                // 위치 정보 송신
-                strcpy((char*)sdu, (char*)originalWord);
-                debug_if(DBGMSG_L3, "[L3][IDLE] sending location : %s (len:%i)\n", sdu, wordLen);
-                L3_LLI_dataReqFunc(sdu, wordLen, myDestId);
-
-                pc.printf("[IDLE] 위치 정보 전송 완료. 승인 대기 중...\n");
->>>>>>> a4c5042e0d04a6c24d099222410441b65e324475
                 wordLen = 0;
 
                 L3_event_clearEventFlag(L3_event_dataToSend);
@@ -221,7 +171,6 @@ void L3_FSMrun(void)
         // =====================================================
         case L3STATE_ATTEND:
         // 출석 확인 상태
-<<<<<<< HEAD
         // - msgRcvd     : TYPE_ATTENDANCE_APPROVAL(chat_enable=1) -> CHAT
         //                 TYPE_ATTENDANCE_TIMEOUT(CLOSED)         -> IDLE
         //                 TYPE_CHAT_MESSAGE                       -> 메시지 출력
@@ -284,41 +233,12 @@ void L3_FSMrun(void)
                                  "[L3][ATTEND] unhandled type_id=0x%02X, ignoring.\n",
                                  (unsigned)pkt->type_id);
                         break;
-=======
-        // - dataToSend  : 채팅 요청 전송
-        // - msgRcvd     : "SAME_CLASS" 수신 시 → CHAT
-        //                 "LEAVE"      수신 시 → LEAVE
-        // =====================================================
-            if (L3_event_checkEventFlag(L3_event_msgRcvd))
-            {
-                uint8_t* dataPtr = L3_LLI_getMsgPtr();
-                uint8_t  size    = L3_LLI_getSize();
-
-                debug_if(DBGMSG_L3, "\n[L3][ATTEND] RCVD : %s (length:%i)\n", dataPtr, size);
-
-                if (strncmp((char*)dataPtr, "SAME_CLASS", 10) == 0)
-                {
-                    pc.printf("[ATTEND] 동일 반 확인 -> CHAT 상태로 이동\n");
-                    pc.printf("[CHAT] 메시지를 입력하세요 (종료하려면 'LEAVE' 입력) : ");
-                    main_state = L3STATE_CHAT;
-                }
-                else if (strncmp((char*)dataPtr, "LEAVE", 5) == 0)
-                {
-                    pc.printf("[ATTEND] 이탈 신호 수신 -> LEAVE 상태로 이동\n");
-                    main_state = L3STATE_LEAVE;
-                }
-                else
-                {
-                    pc.printf("[ATTEND] 수신 : %s\n", dataPtr);
-                    pc.printf("[ATTEND] 채팅 요청 메시지를 입력하세요 : ");
->>>>>>> a4c5042e0d04a6c24d099222410441b65e324475
                 }
 
                 L3_event_clearEventFlag(L3_event_msgRcvd);
             }
             else if (L3_event_checkEventFlag(L3_event_dataToSend))
             {
-<<<<<<< HEAD
                 // send the typed text as a TYPE_CHAT_MESSAGE (acts as chat join request)
                 // CU will respond with chat_enable=1 -> transition to CHAT
                 makeChatPacket(&txPacket, myId, (char*)originalWord);
@@ -326,12 +246,6 @@ void L3_FSMrun(void)
                          originalWord, (int)sizeof(packet_data_t));
                 L3_LLI_dataReqFunc((uint8_t*)&txPacket,
                                    sizeof(packet_data_t), myDestId);
-=======
-                // 채팅 요청 전송
-                strcpy((char*)sdu, (char*)originalWord);
-                debug_if(DBGMSG_L3, "[L3][ATTEND] sending chat request : %s (len:%i)\n", sdu, wordLen);
-                L3_LLI_dataReqFunc(sdu, wordLen, myDestId);
->>>>>>> a4c5042e0d04a6c24d099222410441b65e324475
 
                 pc.printf("[ATTEND] 채팅 요청 전송 완료. 동일 반 확인 대기 중...\n");
                 wordLen = 0;
@@ -343,7 +257,6 @@ void L3_FSMrun(void)
         // =====================================================
         case L3STATE_CHAT:
         // 채팅 상태
-<<<<<<< HEAD
         // - msgRcvd     : TYPE_CHAT_MESSAGE               -> 수신 메시지 출력
         //                 TYPE_ATTENDANCE_TIMEOUT(CLOSED) -> IDLE 복귀
         //                 TYPE_ATTENDANCE_TIMEOUT(WARNING)-> 경고 출력
@@ -394,20 +307,6 @@ void L3_FSMrun(void)
                                  (unsigned)pkt->type_id);
                         break;
                 }
-=======
-        // - msgRcvd     : 수신 메시지 출력
-        // - dataToSend  : 메시지 전송
-        //                 "LEAVE" 입력 시 → LEAVE
-        // =====================================================
-            if (L3_event_checkEventFlag(L3_event_msgRcvd))
-            {
-                uint8_t* dataPtr = L3_LLI_getMsgPtr();
-                uint8_t  size    = L3_LLI_getSize();
-
-                debug_if(DBGMSG_L3, "\n[L3][CHAT] RCVD : %s (length:%i)\n", dataPtr, size);
-                pc.printf("\n[CHAT] 수신 (%d bytes) : %s\n", size, dataPtr);
-                pc.printf("[CHAT] 메시지를 입력하세요 : ");
->>>>>>> a4c5042e0d04a6c24d099222410441b65e324475
 
                 L3_event_clearEventFlag(L3_event_msgRcvd);
             }
@@ -424,17 +323,11 @@ void L3_FSMrun(void)
                 else
                 {
                     // 일반 채팅 메시지 전송
-<<<<<<< HEAD
                     makeChatPacket(&txPacket, myId, (char*)originalWord);
                     debug_if(DBGMSG_L3, "[L3][CHAT] sending : %s (len:%i)\n",
                              originalWord, (int)sizeof(packet_data_t));
                     L3_LLI_dataReqFunc((uint8_t*)&txPacket,
                                        sizeof(packet_data_t), myDestId);
-=======
-                    strcpy((char*)sdu, (char*)originalWord);
-                    debug_if(DBGMSG_L3, "[L3][CHAT] sending : %s (len:%i)\n", sdu, wordLen);
-                    L3_LLI_dataReqFunc(sdu, wordLen, myDestId);
->>>>>>> a4c5042e0d04a6c24d099222410441b65e324475
 
                     pc.printf("[CHAT] 전송 완료.\n");
                     pc.printf("[CHAT] 메시지를 입력하세요 (종료하려면 'LEAVE' 입력) : ");
@@ -448,7 +341,6 @@ void L3_FSMrun(void)
         // =====================================================
         case L3STATE_LEAVE:
         // 이탈 상태
-<<<<<<< HEAD
         // - send TYPE_STUDENT_LEAVE to CU, then return to IDLE
         // =====================================================
         {
@@ -457,18 +349,8 @@ void L3_FSMrun(void)
             L3_LLI_dataReqFunc((uint8_t*)&txPacket, sizeof(packet_data_t), myDestId);
 
             debug_if(DBGMSG_L3, "[L3][LEAVE] leave notification sent\n");
-=======
-        // - 진입 즉시 위치 정보 송신 후 IDLE 복귀
-        // =====================================================
-        {
-            strcpy((char*)sdu, "LEAVE");
-            uint8_t leaveLen = strlen((char*)sdu) + 1;
-            L3_LLI_dataReqFunc(sdu, leaveLen, myDestId);
-
-            debug_if(DBGMSG_L3, "[L3][LEAVE] leave location sent\n");
->>>>>>> a4c5042e0d04a6c24d099222410441b65e324475
             pc.printf("[LEAVE] 이탈 위치 정보 전송 완료. IDLE로 복귀\n");
-            pc.printf("[IDLE] 위치 정보를 입력하세요 : ");
+            pc.printf("[IDLE] 출석 창이 열릴 때까지 대기 중입니다.\n");
 
             L3_event_clearAllEventFlag();
             wordLen = 0;
