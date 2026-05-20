@@ -36,7 +36,7 @@ static uint8_t inputWordLen = 0;
 static packet_data_t txPacket;
 
 // per-student attendance table indexed by L2 source ID [0 .. L3_MAX_STUDENTS-1]
-// 1 = present (TYPE_PRESENCE received with L2 RSSI >= L3_RSSI_THRESHOLD), 0 = absent
+// 1 = present (TYPE_PRESENCE received; CU RSSI >= L3_RSSI_THRESHOLD), 0 = absent
 static uint8_t attendanceTable[L3_MAX_STUDENTS];
 
 // 수정: 학생별 RSSI 다중 측정 평균을 위한 누적 변수
@@ -264,7 +264,18 @@ void L3_FSMrun(void)
 
                         if (srcId < L3_MAX_STUDENTS)
                         {
-                            // 수정: RSSI 다중 측정 평균 로직
+                            // 이미 출석 승인된 학생이 위치 신호를 재전송하는 경우:
+                            // RSSI 누적 없이 바로 재승인 (재전송으로 인한 불필요한 누적 방지)
+                            if (attendanceTable[srcId])
+                            {
+                                debug_if(DBGMSG_L3,
+                                         "[L3] Student %i already present, re-sending approval.\n",
+                                         srcId);
+                                L3_CU_sendApproval(srcId, 1, 0);
+                                break;
+                            }
+
+                            // 신규 학생: RSSI 다중 측정 평균 로직
                             // L3_RSSI_SAMPLE_COUNT 회 수신 후 평균값으로 출석 판단
                             rssiSum[srcId]  += rssi;
                             rssiCount[srcId]++;

@@ -52,7 +52,11 @@ OBJECTS += L2_msg.o
 OBJECTS += L2_FSMevent.o
 OBJECTS += L2_LLinterface.o
 OBJECTS += L2_timer.o
-OBJECTS += L3_FSMmain.o
+# NODE_TYPE selects which L3 FSM to compile.
+# Use: make NODE_TYPE=CU      -> builds Control Unit binary (default)
+#      make NODE_TYPE=student -> builds Student binary
+NODE_TYPE ?= CU
+OBJECTS += L3_FSMmain_$(NODE_TYPE).o
 OBJECTS += L3_msg.o
 OBJECTS += L3_FSMevent.o
 OBJECTS += L3_LLinterface.o

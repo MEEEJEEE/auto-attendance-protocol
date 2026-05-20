@@ -128,6 +128,16 @@ void L3_FSMrun(void)
                     {
                         attendance_approval_t* approval = (attendance_approval_t*)pkt->data;
 
+                        // 내 ID로 발송된 승인 패킷인지 확인
+                        // (unicast 전송이지만 L2 브로드캐스트로 잘못 수신된 경우 대비)
+                        if (approval->student_id != myId)
+                        {
+                            debug_if(DBGMSG_L3,
+                                     "[L3][IDLE] approval for student %i, I am %i, ignoring.\n",
+                                     approval->student_id, myId);
+                            break;
+                        }
+
                         if (approval->attendance_ok == 1)
                         {
                             // CU approved attendance -> advance to ATTEND

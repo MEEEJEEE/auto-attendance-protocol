@@ -3,8 +3,10 @@
 #include "L2_FSMmain.h"
 #include "L3_FSMmain.h"
 
-//serial port interface
-Serial pc(USBTX, USBRX);
+// NOTE: Serial pc is declared as 'static' inside each L3_FSMmain_*.cpp.
+// Do NOT declare another Serial pc here — mbed does not support two Serial
+// objects on the same USBTX/USBRX pins and will malfunction at runtime.
+// Use printf/scanf which mbed retargets to the USB serial port automatically.
 
 //GLOBAL variables (DO NOT TOUCH!) ------------------------------------------
 
@@ -16,15 +18,15 @@ uint8_t input_destId=0;
 int main(void){
 
     //initialization
-    pc.printf("------------------ protocol stack starts! --------------------------\n");
+    printf("------------------ protocol stack starts! --------------------------\n");
         //source & destination ID setting
-    pc.printf(":: ID for this node : ");
-    pc.scanf("%d", &input_thisId);
-    pc.printf(":: ID for the destination : ");
-    pc.scanf("%d", &input_destId);
-    pc.getc();
+    printf(":: ID for this node : ");
+    scanf("%d", &input_thisId);
+    printf(":: ID for the destination : ");
+    scanf("%d", &input_destId);
+    getchar(); // consume trailing newline after scanf
 
-    pc.printf("endnode : %i, dest : %i\n", input_thisId, input_destId);
+    printf("endnode : %i, dest : %i\n", input_thisId, input_destId);
     
     
 

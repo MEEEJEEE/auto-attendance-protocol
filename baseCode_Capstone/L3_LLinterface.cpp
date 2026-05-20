@@ -5,7 +5,7 @@
 #include "protocol_parameters.h"
 #include "time.h"
 
-# define CU_ID 0
+#define CU_ID 0
 
 static uint8_t rcvdMsg[L3_MAXDATASIZE];
 static uint8_t rcvdSize;

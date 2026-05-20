@@ -56,13 +56,19 @@ static uint8_t L2_validityCheck_ID(void)
 
 uint8_t L2_configDestId(uint8_t destId)
 {
+    // Fix: update destL2ID BEFORE the validity check.
+    // Previously destL2ID was only written on success, so for the CU node
+    // (myL2ID=0, initial destL2ID=0) the very first call always failed the
+    // check (0==0) and left destL2ID=0, causing all outbound packets to be
+    // addressed to the CU itself instead of the intended destination.
+    destL2ID = destId;
+
     if (L2_validityCheck_ID() == 1)
     {
-        debug("[L2] Failed to config dest to ID %i\n", destId);
+        debug("[L2] Warning: dest ID same as my ID (%i)\n", destId);
         return 1;
     }
 
-    destL2ID = destId;
     return 0;
 }
 
