@@ -21,6 +21,7 @@ static uint8_t prev_state = main_state;
 //SDU (input)
 static uint8_t originalWord[1030];
 static uint8_t wordLen = 0;
+static uint8_t sdu[L3_MAXDATASIZE];
 
 // outbound packet assembly buffer
 static packet_data_t txPacket;
@@ -256,13 +257,29 @@ void L3_FSMrun(void)
                         break;
                     }
 
+                    // case TYPE_CHAT:
+                    // {
+                    //     uint8_t src_id  = pkt->data[0];
+                    //     uint8_t* msg    = &pkt->data[1];
+                    //     pc.printf("[CHAT] #%i: %s\n", src_id, msg);
+                    //     break;
+                    // }
+
+                    // Chat RX 수정
                     case TYPE_CHAT:
                     {
-                        uint8_t src_id  = pkt->data[0];
-                        uint8_t* msg    = &pkt->data[1];
-                        pc.printf("[CHAT] #%i: %s\n", src_id, msg);
+                        // 수신 raw 버퍼 직접 파싱
+                        // dataPtr[0] = mode
+                        // dataPtr[1] = type_id  (이미 switch에서 확인됨)
+                        // dataPtr[2] = src_id
+                        // dataPtr[3~]= message string
+                        uint8_t  src_id = dataPtr[2];
+                        uint8_t* msg    = &dataPtr[3];
+
+                        pc.printf("[CHAT] #%u: %s\n", (unsigned)src_id, msg);
                         break;
                     }
+
 
                     default:
                         debug_if(DBGMSG_L3,
@@ -274,17 +291,39 @@ void L3_FSMrun(void)
                 L3_event_clearEventFlag(L3_event_msgRcvd);
             }
 
-            // chat TX
-            else if (L3_event_checkEventFlag(L3_event_dataToSend)) 
-            {
-                // data[0] : src_student_id (수신측에서 송신자 식별)
-                // data[1~]: message payload
-                txPacket.mode    = PACKET_MODE_STUDENT_TO_STUDENT;
-                txPacket.type_id = TYPE_CHAT;
-                txPacket.data[0] = myId;
-                memcpy(&txPacket.data[1], originalWord, wordLen + 1);  // +1: null terminator
+            // // chat TX
+            // else if (L3_event_checkEventFlag(L3_event_dataToSend)) 
+            // {
+            //     // data[0] : src_student_id (수신측에서 송신자 식별)
+            //     // data[1~]: message payload
+            //     txPacket.mode    = PACKET_MODE_STUDENT_TO_STUDENT;
+            //     txPacket.type_id = TYPE_CHAT;
+            //     txPacket.data[0] = myId;
+            //     memcpy(&txPacket.data[1], originalWord, wordLen + 1);  // +1: null terminator
 
-                L3_LLI_dataReqFunc((uint8_t*)&txPacket, sizeof(packet_data_t), L3_BROADCAST_ID);
+            //     L3_LLI_dataReqFunc((uint8_t*)&txPacket, sizeof(packet_data_t), L3_BROADCAST_ID);
+
+            //     pc.printf("[ATTEND] 메시지를 입력하세요: %s\n", originalWord);
+            //     wordLen = 0;
+            //     L3_event_clearEventFlag(L3_event_dataToSend);
+            // }
+            // break;
+
+            // Chat TX 수정
+            else if (L3_event_checkEventFlag(L3_event_dataToSend))
+            {
+                // sdu[0] = mode    (STUDENT_TO_STUDENT)
+                // sdu[1] = type_id (TYPE_CHAT)
+                // sdu[2] = src_id  (myId)
+                // sdu[3~]= message + '\0'
+                sdu[0] = PACKET_MODE_STUDENT_TO_STUDENT;
+                sdu[1] = TYPE_CHAT;
+                sdu[2] = myId;
+                memcpy(&sdu[3], originalWord, wordLen + 1);  // +1: null terminator 포함
+
+                uint8_t pktLen = 3 + wordLen + 1;
+
+                L3_LLI_dataReqFunc(sdu, pktLen, L3_BROADCAST_ID);
 
                 pc.printf("[ATTEND] 메시지를 입력하세요: %s\n", originalWord);
                 wordLen = 0;
