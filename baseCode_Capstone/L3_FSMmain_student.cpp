@@ -90,6 +90,12 @@ void L3_FSMrun(void)
     {
         debug_if(DBGMSG_L3, "[L3] State transition from %i to %i\n", prev_state, main_state);
         prev_state = main_state;
+
+        if (main_state == L3STATE_ATTEND) // 채팅 시 메세지 형식 화면 출력
+        {
+            pc.printf("\n[CHAT FORMAT] <destId> <message>\n");
+            pc.printf("example: 3 hello\n> ");
+        }
     }
 
     // 공통: 주기적 presence 송신 (모든 state)
@@ -212,17 +218,42 @@ void L3_FSMrun(void)
         //                 TYPE_ATTENDANCE_TIMEOUT(WARNING) -> 경고 출력
         //                 TYPE_CHAT                        -> 채팅 수신
         // - dataToSend  : 채팅 송신
+        
+        // =====================================================
+        // RX
         // =====================================================
             if (L3_event_checkEventFlag(L3_event_msgRcvd))
             {
                 uint8_t*       dataPtr = L3_LLI_getMsgPtr();
                 uint8_t        size    = L3_LLI_getSize();
+
+                // -------------------------------------------------
+                // 1. Student <-> Student CHAT packet
+                // -------------------------------------------------
+                if (size >= 3) // smallest Chat header size (type + src + dest)
+                {
+                    chat_packet_t* chat = (chat_packet_t*)dataPtr;
+
+                    // TYPE_CHAT 확인
+                    if (chat->type_id == TYPE_CHAT)
+                    {
+                        // 내게 온 메시지만 처리
+                        if (chat->dest_id == myId)
+                        {
+                            pc.printf("\n[CHAT] #%u: %s\n",
+                                    (unsigned)chat->src_id,
+                                    chat->message);
+                        }
+
+                        L3_event_clearEventFlag(L3_event_msgRcvd);
+                        break;
+                    }
+                }
+                        
+                // -------------------------------------------------
+                // 2. CU -> Student packet
+                // -------------------------------------------------
                 packet_data_t* pkt     = (packet_data_t*)dataPtr;
-
-                (void)size;
-
-                debug_if(DBGMSG_L3, "\n[L3][ATTEND] RCVD type_id=0x%02X (len:%i)\n",
-                         (unsigned)pkt->type_id, size);
 
                 switch (pkt->type_id)
                 {
@@ -256,79 +287,50 @@ void L3_FSMrun(void)
                         }
                         break;
                     }
-
-                    // case TYPE_CHAT:
-                    // {
-                    //     uint8_t src_id  = pkt->data[0];
-                    //     uint8_t* msg    = &pkt->data[1];
-                    //     pc.printf("[CHAT] #%i: %s\n", src_id, msg);
-                    //     break;
-                    // }
-
-                    // Chat RX 수정
-                    case TYPE_CHAT:
-                    {
-                        // 수신 raw 버퍼 직접 파싱
-                        // dataPtr[0] = mode
-                        // dataPtr[1] = type_id  (이미 switch에서 확인됨)
-                        // dataPtr[2] = src_id
-                        // dataPtr[3~]= message string
-                        uint8_t  src_id = dataPtr[2];
-                        uint8_t* msg    = &dataPtr[3];
-
-                        pc.printf("[CHAT] #%u: %s\n", (unsigned)src_id, msg);
-                        break;
-                    }
-
-
+                    
                     default:
-                        debug_if(DBGMSG_L3,
-                                 "[L3][ATTEND] unhandled type_id=0x%02X, ignoring.\n",
-                                 (unsigned)pkt->type_id);
                         break;
                 }
-
+                    
                 L3_event_clearEventFlag(L3_event_msgRcvd);
             }
 
-            // // chat TX
-            // else if (L3_event_checkEventFlag(L3_event_dataToSend)) 
-            // {
-            //     // data[0] : src_student_id (수신측에서 송신자 식별)
-            //     // data[1~]: message payload
-            //     txPacket.mode    = PACKET_MODE_STUDENT_TO_STUDENT;
-            //     txPacket.type_id = TYPE_CHAT;
-            //     txPacket.data[0] = myId;
-            //     memcpy(&txPacket.data[1], originalWord, wordLen + 1);  // +1: null terminator
-
-            //     L3_LLI_dataReqFunc((uint8_t*)&txPacket, sizeof(packet_data_t), L3_BROADCAST_ID);
-
-            //     pc.printf("[ATTEND] 메시지를 입력하세요: %s\n", originalWord);
-            //     wordLen = 0;
-            //     L3_event_clearEventFlag(L3_event_dataToSend);
-            // }
-            // break;
-
-            // Chat TX 수정
+            // =====================================================
+            // TX
+            // =====================================================
             else if (L3_event_checkEventFlag(L3_event_dataToSend))
             {
-                // sdu[0] = mode    (STUDENT_TO_STUDENT)
-                // sdu[1] = type_id (TYPE_CHAT)
-                // sdu[2] = src_id  (myId)
-                // sdu[3~]= message + '\0'
-                sdu[0] = PACKET_MODE_STUDENT_TO_STUDENT;
-                sdu[1] = TYPE_CHAT;
-                sdu[2] = myId;
-                memcpy(&sdu[3], originalWord, wordLen + 1);  // +1: null terminator 포함
+                uint8_t destId;
 
-                uint8_t pktLen = 3 + wordLen + 1;
+                // 예:
+                // 입력 형식 -> "2021 hello"
+                sscanf((char*)originalWord, "%hhu %[^\t\n]",
+                    &destId,
+                    (char*)sdu);
 
-                L3_LLI_dataReqFunc(sdu, pktLen, L3_BROADCAST_ID);
+                chat_packet_t chatPkt;
 
-                pc.printf("[ATTEND] 메시지를 입력하세요: %s\n", originalWord);
+                makeChatPacket(&chatPkt,
+                            myId,
+                            destId,
+                            (char*)sdu);
+
+                L3_LLI_dataReqFunc(
+                    (uint8_t*)&chatPkt,
+                    sizeof(chat_packet_t),
+                    destId
+                );
+
+                pc.printf("[CHAT] to #%u : %s\n",
+                        (unsigned)destId,
+                        chatPkt.message);
+
+                pc.printf("> "); // TX complete 확인
+
                 wordLen = 0;
                 L3_event_clearEventFlag(L3_event_dataToSend);
             }
+
             break;
 
         // =====================================================
