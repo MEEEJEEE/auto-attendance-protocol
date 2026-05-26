@@ -3,6 +3,7 @@
 #include "L3_timer.h"
 #include "L3_LLinterface.h"
 #include "L3_convertPacket.h"
+#include "L3_chatProtocol.h"
 #include "protocol_parameters.h"
 #include "mbed.h"
 
@@ -235,10 +236,10 @@ void L3_FSMrun(void)
                     chat_packet_t* chat = (chat_packet_t*)dataPtr;
 
                     // TYPE_CHAT 확인
-                    if (chat->type_id == TYPE_CHAT)
+                    if (chat->type == TYPE_CHAT)
                     {
                         // 내게 온 메시지만 처리
-                        if (chat->dest_id == myId)
+                        if (chat->dst_id == myId)
                         {
                             pc.printf("\n[CHAT] #%u: %s\n",
                                     (unsigned)chat->src_id,
@@ -257,16 +258,20 @@ void L3_FSMrun(void)
 
                 switch (pkt->type_id)
                 {
-                    case TYPE_LEAVE_DETECTED: // 이탈 감지 신호 수신 필요!!
+                    case TYPE_ATTENDANCE_APPROVAL: // 이탈 감지 신호 수신 필요!!
                     {
-                        leave_detected_t* info =
-                            (leave_detected_t*)pkt->data;
+                        attendance_approval_t* approval =
+                            (attendance_approval_t*)pkt->data;
 
-                        if (info->student_id != myId) break;
+                        if (approval->student_id != myId) break;
 
                         // CU가 이탈 판단 → LEAVE 전이
-                        pc.printf("[ATTEND] 이탈 감지 (CU) -> LEAVE\n");
-                        main_state = L3STATE_LEAVE;
+                        // ATTEND 상태인데 출석 실패 판정
+                        if (approval->attendance_ok == 0)
+                        {
+                            pc.printf("[ATTEND] 이탈 감지 -> LEAVE\n");
+                            main_state = L3STATE_LEAVE;
+                        }
                         break;
                     }
 
@@ -348,14 +353,20 @@ void L3_FSMrun(void)
 
                 switch (pkt->type_id)
                 {
-                    case TYPE_RETURN_APPROVED: // 복귀 허용 신호 수신 필요!!
+                    case TYPE_ATTENDANCE_APPROVAL: // 복귀 허용 신호 수신 필요!!
                     {
-                        return_approved_t* info = (return_approved_t*)pkt->data; // return_approved_t X
+                        attendance_approval_t* approval =
+                            (attendance_approval_t*)pkt->data;
 
-                        if (info->student_id != myId) break;
+                        if (approval->student_id != myId) break;
 
-                        pc.printf("[LEAVE] 복귀 승인 (CU) -> ATTEND\n");
-                        main_state = L3STATE_ATTEND;
+
+                        // LEAVE 상태인데 다시 승인됨
+                        if (approval->attendance_ok == 1)
+                        {
+                            pc.printf("[LEAVE] 복귀 승인 -> ATTEND\n");
+                            main_state = L3STATE_ATTEND;
+                        }
                         break;
                     }
 

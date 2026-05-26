@@ -35,7 +35,7 @@
 typedef struct
 {
     uint8_t mode;                         // CHAT_MODE_STUDENT_TO_STUDENT
-    uint8_t type;                         // CHAT_TYPE_MESSAGE
+    uint8_t type;                         // TYPE_CHAT
 
     uint8_t src_id;                       // sender student ID
     uint8_t dst_id;                       // destination student ID
@@ -58,8 +58,8 @@ static inline void makeChatPacket(
     const char* msg
 )
 {
-    pkt->mode   = CHAT_MODE_STUDENT_TO_STUDENT;
-    pkt->type   = CHAT_TYPE_MESSAGE;
+    pkt->mode       = CHAT_MODE_STUDENT_TO_STUDENT;
+    pkt->type       = TYPE_CHAT;
 
     pkt->src_id = srcId;
     pkt->dst_id = dstId;

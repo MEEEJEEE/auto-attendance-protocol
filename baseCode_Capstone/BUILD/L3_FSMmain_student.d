@@ -1,4 +1,5 @@
-L3_FSMevent_CU.o: ../L3_FSMevent_CU.cpp ../mbed_config.h ../mbed.h \
+L3_FSMmain_student.o: ../L3_FSMmain_student.cpp ../mbed_config.h \
+ ../L3_FSMevent_student.h ../L3_msg.h ../mbed.h \
  ../mbed/platform/mbed_version.h ../mbed/platform/mbed_toolchain.h \
  ../mbed/platform/mbed_preprocessor.h ../mbed/platform/platform.h \
  ../mbed/platform/mbed_retarget.h \
@@ -139,4 +140,5 @@ L3_FSMevent_CU.o: ../L3_FSMevent_CU.cpp ../mbed_config.h ../mbed.h \
  ../mbed/platform/FileSystemHandle.h ../mbed/platform/DirHandle.h \
  ../mbed/platform/CriticalSectionLock.h ../mbed/platform/DeepSleepLock.h \
  ../mbed/platform/mbed_stats.h ../mbed/platform/ScopedLock.h \
- ../L3_FSMevent_CU.h
+ ../L3_convertPacket.h ../L3_timer.h ../L3_LLinterface.h \
+ ../L3_chatProtocol.h ../protocol_parameters.h
