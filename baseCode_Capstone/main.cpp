@@ -14,6 +14,33 @@
 uint8_t input_thisId=1;
 uint8_t input_destId=0;
 
+
+// ========== 수정 코드 추가 ============
+uint8_t getID()
+{
+    char c;
+    char rx_buffer[4];
+    int rx_index = 0;
+
+    while (1)
+    {
+        c = getchar();
+
+        if (c == '\n' || c == '\r')
+        {
+            rx_buffer[rx_index] = '\0';
+            break;
+        }
+        else
+        {
+            rx_buffer[rx_index++] = c;
+        }
+    }
+
+    return (uint8_t)atoi(rx_buffer);
+}
+
+
 //FSM operation implementation ------------------------------------------------
 int main(void){
 
@@ -21,9 +48,9 @@ int main(void){
     printf("------------------ protocol stack starts! --------------------------\n");
         //source & destination ID setting
     printf(":: ID for this node : ");
-    scanf("%d", &input_thisId);
+    input_thisId = getID();
     printf(":: ID for the destination : ");
-    scanf("%d", &input_destId);
+    input_thisId = getID();
     getchar(); // consume trailing newline after scanf
 
     printf("endnode : %i, dest : %i\n", input_thisId, input_destId);

@@ -58,7 +58,7 @@ OBJECTS += L2_timer.o
 NODE_TYPE ?= CU
 OBJECTS += L3_FSMmain_$(NODE_TYPE).o
 OBJECTS += L3_msg.o
-OBJECTS += L3_FSMevent.o
+OBJECTS += L3_FSMevent_$(NODE_TYPE).o
 OBJECTS += L3_LLinterface.o
 OBJECTS += L3_timer.o
 
