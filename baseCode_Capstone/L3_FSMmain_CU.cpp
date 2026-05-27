@@ -126,8 +126,9 @@ static void L3service_processInputWord(void)
             if (inputWordLen >= L3_MAXDATASIZE - 1)
             {
                 inputWord[inputWordLen++] = '\0';
+                // ISR 내부에서 printf 호출은 mbed에서 하드폴트를 유발할 수 있으므로
+                // 플래그 설정만 수행하고 printf는 메인루프에서 처리함
                 L3_event_setEventFlag(L3_event_dataToSend);
-                pc.printf("\n[CU] input buffer full, processing: %s\n", inputWord);
             }
         }
     }
@@ -181,23 +182,28 @@ void L3_FSMrun(void)
             {
                 if (strcmp((char*)inputWord, "start") == 0)
                 {
-                    // event a: class start time reached
-                    // Action 1: activate attendance collection and PRESENCE reception
+                    // [단계 1] 'start' 명령 입력 확인 → 출석 창 OPEN 전환 시작
+                    pc.printf("\n[단계 1] 'start' 명령 수신. 출석 창을 열겠습니다.\n");
+
                     pc.printf("[CU] Attendance window OPEN (%i sec).\n",
                               L3_ATTEND_WINDOW_SEC);
 
-                    // notify all students that the window is now open
+                    // [단계 2] 모든 학생에게 TIMEOUT_FLAG_OPEN 브로드캐스트 전송
+                    pc.printf("[단계 2] 출석 창 열림 신호(OPEN) 전체 브로드캐스트 전송 중...\n");
                     L3_CU_broadcastTimeout(TIMEOUT_FLAG_OPEN);
+                    pc.printf("[단계 2] 브로드캐스트 전송 완료.\n");
 
-                    // arm pre-deadline and deadline timers
+                    // [단계 3] 출석 마감 타이머 및 사전 경고 타이머 시작
+                    pc.printf("[단계 3] 출석 타이머 시작 (마감: %d초, 사전경고: %d초).\n",
+                              L3_ATTEND_WINDOW_SEC, L3_PRE_DEADLINE_ALERT_SEC);
                     L3_timer_startAttendanceWindow();
 
-                    // transition: 0 (WAIT) -> 1 (OPEN)
+                    // 상태 전이: 0 (WAIT) -> 1 (OPEN)
                     main_state = L3STATE_OPEN;
                 }
                 else
                 {
-                    pc.printf("[CU][WAIT] Unknown command '%s'. Type 'start' to begin.\n",
+                    pc.printf("[CU][WAIT] 알 수 없는 명령 '%s'. 'start'를 입력하세요.\n",
                               inputWord);
                 }
                 inputWordLen = 0;
@@ -220,26 +226,30 @@ void L3_FSMrun(void)
 
             if (L3_event_checkEventFlag(L3_event_attendDeadline))
             {
-                // event b: attendance window timer expired
-                // Action 2: close attendance, broadcast CLOSED notification
+                // [단계 9] 출석 마감 타이머 만료 → CLOSED 전환
+                pc.printf("\n[단계 9] 출석 마감 타이머 만료. 출석 창을 닫습니다.\n");
                 pc.printf("[CU] Attendance window CLOSED.\n");
+
+                // 모든 학생에게 TIMEOUT_FLAG_CLOSED 브로드캐스트
                 L3_CU_broadcastTimeout(TIMEOUT_FLAG_CLOSED);
                 L3_CU_printAttendanceSummary();
 
-                // transition: 1 (OPEN) -> 2 (CLOSED)
+                // 상태 전이: 1 (OPEN) -> 2 (CLOSED)
                 main_state = L3STATE_CLOSED;
                 L3_event_clearEventFlag(L3_event_attendDeadline);
             }
             else if (L3_event_checkEventFlag(L3_event_preDeadlineAlert))
             {
-                // pre-deadline: broadcast a warning to all students still absent
+                // [단계 8] 사전 경고 타이머 만료 → WARNING 브로드캐스트
+                pc.printf("\n[단계 8] 출석 마감 %d초 전 사전 경고 브로드캐스트 전송.\n",
+                          L3_PRE_DEADLINE_ALERT_SEC);
                 pc.printf("[CU] Broadcasting pre-deadline absence alert.\n");
                 L3_CU_broadcastTimeout(TIMEOUT_FLAG_WARNING);
                 L3_event_clearEventFlag(L3_event_preDeadlineAlert);
             }
             else if (L3_event_checkEventFlag(L3_event_msgRcvd))
             {
-                // cast the raw buffer to the common packet frame
+                // 수신 패킷을 공통 프레임으로 캐스팅
                 uint8_t*       dataPtr = L3_LLI_getMsgPtr();
                 uint8_t        size    = L3_LLI_getSize();
                 uint8_t        srcId   = L3_LLI_getSrcId();
@@ -249,14 +259,15 @@ void L3_FSMrun(void)
 
                 switch (pkt->type_id)
                 {
-                    // 수정: TYPE_RSSI_INFO → TYPE_PRESENCE 로 변경
-                    //       RSSI를 패킷 페이로드에서 읽지 않고
-                    //       L3_LLI_getRssi()로 L2 레이어에서 직접 측정
-                    //       (주석 "L2_LLI_getRssi() 활용 생각할 것" 반영)
+                    // TYPE_PRESENCE: 학생 위치 신호 수신
+                    // RSSI는 패킷 페이로드가 아닌 L2에서 직접 측정 (L3_LLI_getRssi() 사용)
                     case TYPE_PRESENCE:
                     {
-                        // 학생이 위치 신호를 보냄: CU에서 L2 RSSI를 직접 읽어 판단
                         int16_t rssi = L3_LLI_getRssi();
+
+                        // [단계 4] PRESENCE 수신 확인 (학생 ID, RSSI 출력)
+                        pc.printf("\n[단계 4] 학생 %i 위치 신호(PRESENCE) 수신. RSSI=%i dBm\n",
+                                  srcId, rssi);
 
                         debug_if(DBGMSG_L3,
                                  "[L3] TYPE_PRESENCE from student %i, rssi=%i dBm\n",
@@ -264,10 +275,12 @@ void L3_FSMrun(void)
 
                         if (srcId < L3_MAX_STUDENTS)
                         {
-                            // 이미 출석 승인된 학생이 위치 신호를 재전송하는 경우:
-                            // RSSI 누적 없이 바로 재승인 (재전송으로 인한 불필요한 누적 방지)
+                            // 이미 출석 승인된 학생의 재전송 처리:
+                            // RSSI 누적 없이 바로 재승인 (불필요한 누적 방지)
                             if (attendanceTable[srcId])
                             {
+                                pc.printf("[단계 4] 학생 %i 이미 출석 확인됨. 재승인 패킷 전송.\n",
+                                          srcId);
                                 debug_if(DBGMSG_L3,
                                          "[L3] Student %i already present, re-sending approval.\n",
                                          srcId);
@@ -280,33 +293,40 @@ void L3_FSMrun(void)
                             rssiSum[srcId]  += rssi;
                             rssiCount[srcId]++;
 
-                            pc.printf("[CU] Student %i RSSI=%i dBm 수신 (%u/%u 샘플)\n",
+                            // [단계 5] RSSI 샘플 누적 중 (N/SAMPLE_COUNT)
+                            pc.printf("[단계 5] 학생 %i RSSI=%i dBm 누적 중 (%u/%u 샘플)\n",
                                       srcId, rssi,
                                       (unsigned)rssiCount[srcId],
                                       (unsigned)L3_RSSI_SAMPLE_COUNT);
 
                             if (rssiCount[srcId] >= L3_RSSI_SAMPLE_COUNT)
                             {
-                                // 충분한 샘플 수집 완료 → 평균 RSSI 계산
+                                // 샘플 수집 완료 → 평균 RSSI 계산
                                 int16_t avgRssi = (int16_t)(rssiSum[srcId] / rssiCount[srcId]);
 
-                                pc.printf("[CU] Student %i 평균 RSSI=%i dBm (임계값=%i dBm)\n",
+                                pc.printf("[단계 5] 학생 %i 샘플 수집 완료. 평균 RSSI=%i dBm (임계값=%i dBm)\n",
                                           srcId, avgRssi, L3_RSSI_THRESHOLD);
 
                                 if (avgRssi >= L3_RSSI_THRESHOLD)
                                 {
-                                    // 강의실 내 위치 확인 → 출석 승인
+                                    // [단계 6-승인] 평균 RSSI 임계값 이상 → 강의실 내 위치 확인, 출석 승인
+                                    pc.printf("[단계 6-승인] 학생 %i 평균 RSSI %i >= 임계값 %i. 출석 승인.\n",
+                                              srcId, avgRssi, L3_RSSI_THRESHOLD);
                                     L3_CU_markPresent(srcId);
+                                    // [단계 7] 승인 패킷 전송 (markPresent 내부에서 sendApproval 호출됨)
+                                    pc.printf("[단계 7] 학생 %i 승인 패킷 전송 완료.\n", srcId);
                                 }
                                 else
                                 {
-                                    // 평균 RSSI가 임계값 미만 → 강의실 외부로 판단, 출석 거부
+                                    // [단계 6-거부] 평균 RSSI 임계값 미만 → 강의실 외부 판단, 출석 거부
+                                    pc.printf("[단계 6-거부] 학생 %i 평균 RSSI %i < 임계값 %i. 출석 거부.\n",
+                                              srcId, avgRssi, L3_RSSI_THRESHOLD);
                                     debug_if(DBGMSG_L3,
                                              "[L3] Student %i avgRSSI=%i below threshold, outside.\n",
                                              srcId, avgRssi);
-                                    pc.printf("[CU] Student %i 출석 거부 (평균 RSSI %i < 임계값 %i)\n",
-                                              srcId, avgRssi, L3_RSSI_THRESHOLD);
                                     L3_CU_sendApproval(srcId, 0, 0);
+                                    // [단계 7] 거부 패킷 전송
+                                    pc.printf("[단계 7] 학생 %i 거부 패킷 전송 완료.\n", srcId);
                                 }
 
                                 // 다음 측정 세션을 위해 누적값 초기화
@@ -317,13 +337,8 @@ void L3_FSMrun(void)
                         break;
                     }
 
-                    // 수정: TYPE_CHAT_MESSAGE case 제거
-                    // 채팅은 CU를 거칠 필요가 없으므로 해당 case 삭제
-                    // (원래 주석 "여기부터 수정 필요. chatting은 CU로 올 필요가 없기 때문." 반영)
-                    // → 학생 간 채팅은 직접 브로드캐스트 방식으로 변경됨
-
-                    // 수정: TYPE_STUDENT_LEAVE case 제거
-                    // L3_convertPacket.h에서 해당 패킷 타입이 제거되었으므로 삭제
+                    // 채팅은 학생 간 직접 브로드캐스트로 처리되므로 CU에서 수신 시 무시
+                    // 이탈 감지 패킷도 현재 미사용 (추후 구현 예정)
 
                     default:
                         debug_if(DBGMSG_L3,

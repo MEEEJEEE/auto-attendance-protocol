@@ -1,6 +1,11 @@
 #include "mbed.h"
+// NODE_TYPE 빌드 플래그에 따라 이벤트 헤더 조건부 선택
+// Makefile에서 NODE_TYPE=student이면 IS_STUDENT가 정의됨
+#ifdef IS_STUDENT
+#include "L3_FSMevent_student.h"
+#else
 #include "L3_FSMevent_CU.h"
-// #include "L3_FSMevent_student.h"
+#endif
 #include "L3_msg.h"
 #include "L3_convertPacket.h"
 #include "protocol_parameters.h"

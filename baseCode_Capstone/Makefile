@@ -62,6 +62,18 @@ OBJECTS += L3_FSMevent_$(NODE_TYPE).o
 OBJECTS += L3_LLinterface.o
 OBJECTS += L3_timer.o
 
+# NODE_TYPE별 컴파일 플래그 추가
+# L3_LLinterface.cpp에서 이벤트 헤더를 조건부로 선택하기 위해 사용
+# make NODE_TYPE=student  -> IS_STUDENT 플래그 정의
+# make NODE_TYPE=CU (기본) -> IS_CU 플래그 정의
+ifeq ($(NODE_TYPE),student)
+CXX_FLAGS += -DIS_STUDENT
+C_FLAGS   += -DIS_STUDENT
+else
+CXX_FLAGS += -DIS_CU
+C_FLAGS   += -DIS_CU
+endif
+
  SYS_OBJECTS += lib/Rx_HAL.o
  SYS_OBJECTS += lib/Rx_HHI.o
  SYS_OBJECTS += lib/Tx_HAL.o

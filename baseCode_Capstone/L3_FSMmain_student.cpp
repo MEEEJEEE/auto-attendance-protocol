@@ -64,8 +64,9 @@ static void L3service_processInputWord(void)
             if (wordLen >= L3_MAXDATASIZE - 1)
             {
                 originalWord[wordLen++] = '\0';
+                // ISR 내부에서 printf 호출은 mbed에서 하드폴트를 유발할 수 있으므로
+                // 플래그 설정만 수행하고 printf는 메인루프에서 처리함
                 L3_event_setEventFlag(L3_event_dataToSend);
-                pc.printf("\n max reached! word forced to be ready :::: %s\n", originalWord);
             }
         }
     }
@@ -305,13 +306,23 @@ void L3_FSMrun(void)
             // =====================================================
             else if (L3_event_checkEventFlag(L3_event_dataToSend))
             {
-                uint8_t destId;
-
-                // 예:
-                // 입력 형식 -> "2021 hello"
-                sscanf((char*)originalWord, "%hhu %[^\t\n]",
-                    &destId,
+                // ARM newlib-nano에서 %hhu가 신뢰성 없이 동작할 수 있으므로
+                // %u + unsigned int로 읽은 후 uint8_t로 캐스팅
+                // 입력 형식 예: "3 hello"
+                unsigned int tmpDestId = 0;
+                int parsed = sscanf((char*)originalWord, "%u %1023[^\t\n]",
+                    &tmpDestId,
                     (char*)sdu);
+                uint8_t destId = (uint8_t)tmpDestId;
+
+                // 입력 형식이 맞지 않으면 무시하고 대기
+                if (parsed < 2)
+                {
+                    pc.printf("[ATTEND] 입력 형식 오류. 올바른 형식: <상대방ID> <메시지>\n> ");
+                    wordLen = 0;
+                    L3_event_clearEventFlag(L3_event_dataToSend);
+                    break;
+                }
 
                 chat_packet_t chatPkt;
 
