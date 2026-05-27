@@ -200,13 +200,20 @@ void L2_FSMrun(void)
                 uint8_t flag_end = L2_msg_checkIfEndData(dataPtr);
 
                 //L3_LLI_dataInd(L2_msg_getWord(dataPtr), srcId, size-L2_MSG_OFFSET_DATA, L2_LLI_getSnr(), L2_LLI_getRssi());
-#ifndef DISABLE_ARQ                
+#ifndef DISABLE_ARQ
+                // SN 불일치 시: 폐기 후 ACK 미전송 대신 강제 resync 후 정상 처리
+                // 이유: LoRa 패킷 손실로 ACK가 유실되면 송신측 seqNum만 증가해
+                //       수신측과 영구 desync 상태가 됨. ACK 없이 폐기하면 송신측이
+                //       재전송을 반복하다 포기하므로, 수신 SN으로 강제 동기화하여
+                //       정상 통신을 복구한다.
                 if (brflag == 0 && seqNum != L2_msg_getSeq(dataPtr))
-                    debug("[L3][WARNING] Invalid PDU SN (%i) while (%i) is required! discarding it...\n", L2_msg_getSeq(dataPtr), seqNum);
-                else
+                {
+                    debug("[L2][WARN] SN mismatch (got %i, expected %i). Force-resync.\n",
+                          L2_msg_getSeq(dataPtr), seqNum);
+                    seqNum = L2_msg_getSeq(dataPtr); // 수신 SN으로 강제 동기화
+                }
 #endif
-                    L2_aggregateData(dataPtr, srcId, size, brflag, flag_end);
-
+                L2_aggregateData(dataPtr, srcId, size, brflag, flag_end);
 
 #ifdef DISABLE_ARQ
                 main_state = L2STATE_IDLE;
@@ -217,13 +224,13 @@ void L2_FSMrun(void)
                 }
                 else
                 {
-                    //ACK transmission
+                    // ACK 전송 (resync 후에는 seqNum == getSeq(dataPtr) 보장됨)
                     if (brflag == 0 && seqNum == L2_msg_getSeq(dataPtr))
-                        seqNum = (seqNum + 1)%L2_MSSG_MAX_SEQNUM;
+                        seqNum = (seqNum + 1) % L2_MSSG_MAX_SEQNUM;
                     L2_msg_encodeAck(arqAck, L2_msg_getSeq(dataPtr));
                     L2_LLI_sendData(arqAck, L2_MSG_ACKSIZE, srcId);
 
-                    main_state = L2STATE_TX; //goto TX state
+                    main_state = L2STATE_TX; // goto TX state
                 }
 #endif
                 L2_event_clearEventFlag(L2_event_dataRcvd);
@@ -265,11 +272,9 @@ void L2_FSMrun(void)
                 debug_if(DBGMSG_L2, "[L2][WARNING] cannot happen in IDLE state (event %i)\n", L2_event_ackTxDone);
                 L2_event_clearEventFlag(L2_event_ackTxDone);
             }
-            else if (L2_event_checkEventFlag(L2_event_dataTxDone)) //if data needs to be sent (keyboard input)
-            {
-                debug_if(DBGMSG_L2, "[L2][WARNING] cannot happen in IDLE state (event %i)\n", L2_event_ackRcvd);
-                L2_event_clearEventFlag(L2_event_ackRcvd);
-            }
+            // 복사-붙여넣기 오류 블록 제거:
+            // dataTxDone을 체크하면서 ackRcvd를 삭제하던 잘못된 코드
+            // dataTxDone은 261번 줄에서 이미 처리됨 (중복 + ackRcvd 오삭제 버그)
             else if (L2_event_checkEventFlag(L2_event_arqTimeout)) //if data needs to be sent (keyboard input)
             {
                 debug_if(DBGMSG_L2, "[WARNING] cannot happen in IDLE state (event %i)\n", L2_event_arqTimeout);
@@ -372,12 +377,16 @@ void L2_FSMrun(void)
                 uint8_t flag_end = L2_msg_checkIfEndData(dataPtr);
 
                 //L3_LLI_dataInd(L2_msg_getWord(dataPtr), srcId, size-L2_MSG_OFFSET_DATA, L2_LLI_getSnr(), L2_LLI_getRssi());
-#ifndef DISABLE_ARQ                
+#ifndef DISABLE_ARQ
+                // IDLE 상태와 동일한 강제 resync 정책 적용
                 if (brflag == 0 && seqNum != L2_msg_getSeq(dataPtr))
-                    debug("[L3][WARNING] Invalid PDU SN (%i) while (%i) is required! discarding it...\n", L2_msg_getSeq(dataPtr), seqNum);
-                else
+                {
+                    debug("[L2][WARN] SN mismatch in ACK state (got %i, expected %i). Force-resync.\n",
+                          L2_msg_getSeq(dataPtr), seqNum);
+                    seqNum = L2_msg_getSeq(dataPtr); // 수신 SN으로 강제 동기화
+                }
 #endif
-                    L2_aggregateData(dataPtr, srcId, size, brflag, flag_end);            
+                L2_aggregateData(dataPtr, srcId, size, brflag, flag_end);
 
 #ifdef DISABLE_ARQ
                 main_state = L2STATE_IDLE;

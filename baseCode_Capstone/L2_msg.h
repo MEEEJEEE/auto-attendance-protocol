@@ -11,7 +11,9 @@
 #define L2_MSG_ACKSIZE      3
 
 #define L2_MSG_MAXDATASIZE  26
-#define L2_MSSG_MAX_SEQNUM  1024
+// seqNum은 uint8_t(0~255)이고 패킷 SN 필드도 1바이트이므로
+// 실효 범위는 0~255. 기존 1024는 uint8_t에서 dead code였음.
+#define L2_MSSG_MAX_SEQNUM  256
 
 
 int L2_msg_checkIfData(uint8_t* msg);
