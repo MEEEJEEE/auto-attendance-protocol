@@ -10,9 +10,16 @@
 
 //GLOBAL variables (DO NOT TOUCH!) ------------------------------------------
 
-//source/destination ID
-uint8_t input_thisId = 1;  // 이 보드 ID
-uint8_t input_destId = 0;  // 목적지 ID
+// NODE_TYPE 빌드 플래그로 ID 자동 설정
+// make NODE_TYPE=CU      → CU: ID=0, dest=255(브로드캐스트)
+// make NODE_TYPE=student → 학생: ID=1, dest=0(CU)
+#ifdef IS_CU
+uint8_t input_thisId = 0;    // CU ID 고정
+uint8_t input_destId = 255;  // CU는 브로드캐스트로 송신
+#else
+uint8_t input_thisId = 1;    // 학생 ID (여러 학생이면 각자 다르게 설정)
+uint8_t input_destId = 0;    // 목적지 = CU
+#endif
 
 //FSM operation implementation ------------------------------------------------
 int main(void){

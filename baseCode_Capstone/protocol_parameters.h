@@ -1,32 +1,71 @@
-#define DBGMSG_L2                       0   //debug print control
-#define DBGMSG_L3                       0   //debug print control
+// ============================================================
+// [실습 파라미터 파일] protocol_parameters.h
+//
+// 이 파일에서 시스템 동작을 제어하는 모든 숫자 상수를 설정합니다.
+// 실습 시 이 값들을 바꿔가며 동작 변화를 관찰하세요.
+// ============================================================
 
+// ------------------------------------------------------------
+// [디버그 출력 제어]
+// 0: 디버그 메시지 출력 안 함 (기본값)
+// 1: 상세한 L2/L3 내부 동작 메시지 출력 (문제 분석 시 사용)
+// 실습: 오류 발생 시 1로 바꾸고 빌드하면 상세 로그를 볼 수 있음
+// ------------------------------------------------------------
+#define DBGMSG_L2                       0   // L2(ARQ/SN) 디버그 출력: 0=꺼짐, 1=켜짐
+#define DBGMSG_L3                       0   // L3(FSM)    디버그 출력: 0=꺼짐, 1=켜짐
+
+// ------------------------------------------------------------
+// [L3 최대 데이터 크기]
+// 학생이 한 번에 입력할 수 있는 최대 바이트 수
+// ------------------------------------------------------------
 #define L3_MAXDATASIZE                  1024
 
+// ------------------------------------------------------------
+// [L2 ARQ(자동 재전송) 파라미터]
+//
+// ARQ(Automatic Repeat reQuest): 패킷이 유실되면 자동으로 재전송하는 메커니즘
+//
+// MAXRETRANSMISSION : 최대 재전송 횟수. 이 횟수를 초과하면 전송 실패로 간주.
+//                     실습: 이 값을 낮추면(예: 3) 손실에 더 민감해짐
+// MAXWAITTIME       : ACK 수신 최대 대기 시간(초). 이 시간 내에 ACK가 없으면 재전송.
+// MINWAITTIME       : 타이머 최소 대기 시간(초).
+// L1_FREQCHANNEL    : LoRa 주파수 채널 (1 = 기준 주파수 × 1 MHz 오프셋)
+// ------------------------------------------------------------
+#define L2_ARQ_MAXRETRANSMISSION        10  // ARQ 최대 재전송 횟수
+#define L2_ARQ_MAXWAITTIME              5   // ACK 최대 대기 시간 (초)
+#define L2_ARQ_MINWAITTIME              2   // 타이머 최소 대기 시간 (초)
+#define L1_FREQCHANNEL                  1   // LoRa 주파수 채널 (× 1MHz)
 
-#define L2_ARQ_MAXRETRANSMISSION        10
-#define L2_ARQ_MAXWAITTIME              5
-#define L2_ARQ_MINWAITTIME              2
-#define L1_FREQCHANNEL                  1   // x 1MHz
+// ------------------------------------------------------------
+// [CU(교수자 단말) 출석 프로토콜 파라미터]
+// ------------------------------------------------------------
 
-// ---------------------------------------------------------------------------
-// CU (Control Unit) protocol parameters
-// ---------------------------------------------------------------------------
+// [RSSI 임계값]
+// 단위: dBm (음수. 절대값이 작을수록 신호 강함. 예: -60 > -80 > -100)
+// 학생의 PRESENCE 패킷을 수신할 때 RSSI가 이 값 이상이면 강의실 내 존재로 판단
+//
+// 실습 포인트:
+//   - 값을 올리면(예: -60) 더 가까이 있어야 출석 인정 → 엄격해짐
+//   - 값을 내리면(예: -100) 멀리서도 출석 인정 → 느슨해짐
+//   - 현재 RSSI는 터미널에서 [단계 4] 메시지로 확인 가능
+#define L3_RSSI_THRESHOLD               -80  // 출석 인정 RSSI 임계값 (dBm)
 
-// RSSI boundary in dBm: a received LOCATION packet with RSSI >= this value
-// indicates the student is within classroom range and is marked present.
-#define L3_RSSI_THRESHOLD               -80
+// [출석 창 유지 시간]
+// CU가 'start'를 입력하면 이 시간(초) 동안 출석을 받고, 이후 자동으로 닫힘
+// 실습: 10으로 낮추면 10초 만에 출석 창이 닫혀서 빠른 테스트 가능
+#define L3_ATTEND_WINDOW_SEC            600  // 출석 창 유지 시간 (초, 기본 10분)
 
-// Total duration of the attendance window in seconds (default: 10 minutes).
-// The CU transitions OPEN -> CLOSED when this timer expires.
-#define L3_ATTEND_WINDOW_SEC            600
+// [사전 경고 타이머]
+// 출석 마감 이 시간(초) 전에 아직 미출석인 학생에게 경고 메시지 브로드캐스트
+// 반드시 L3_ATTEND_WINDOW_SEC보다 작아야 함
+#define L3_PRE_DEADLINE_ALERT_SEC       300  // 마감 전 경고 시점 (초, 기본 5분 전)
 
-// Seconds before the deadline at which the CU broadcasts an absence alert.
-// Must be less than L3_ATTEND_WINDOW_SEC (default: 5 minutes).
-#define L3_PRE_DEADLINE_ALERT_SEC       300
+// [브로드캐스트 ID]
+// L2 수신자 ID가 이 값이면 모든 노드가 수신하는 브로드캐스트 패킷
+// CU가 OPEN/WARNING/CLOSED 신호를 전체 학생에게 보낼 때 사용
+#define L3_BROADCAST_ID                 255  // 브로드캐스트용 특수 ID
 
-// L2 destination ID used for broadcast transmissions (reaches all students).
-#define L3_BROADCAST_ID                 255
-
-// Maximum number of distinct student IDs the CU attendance table can track.
-#define L3_MAX_STUDENTS                 32
+// [최대 학생 수]
+// CU의 출석 테이블 크기. 학생 ID는 1 ~ (L3_MAX_STUDENTS - 1) 범위로 설정
+// main.cpp의 input_thisId가 이 범위 안에 있어야 함
+#define L3_MAX_STUDENTS                 32   // 출석 테이블 최대 학생 수

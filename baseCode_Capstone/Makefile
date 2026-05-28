@@ -52,9 +52,18 @@ OBJECTS += L2_msg.o
 OBJECTS += L2_FSMevent.o
 OBJECTS += L2_LLinterface.o
 OBJECTS += L2_timer.o
-# NODE_TYPE selects which L3 FSM to compile.
-# Use: make NODE_TYPE=CU      -> builds Control Unit binary (default)
-#      make NODE_TYPE=student -> builds Student binary
+# ============================================================
+# [실습 빌드 선택] NODE_TYPE으로 학생용/CU용 코드를 선택합니다.
+#
+#   make                      -> 학생용 바이너리 빌드 (기본값)
+#   make NODE_TYPE=student    -> 학생용 바이너리 빌드
+#   make NODE_TYPE=CU         -> CU(교수자)용 바이너리 빌드
+#
+# 학생용: L3_FSMmain_student.cpp + L3_FSMevent_student.h 사용
+# CU용  : L3_FSMmain_CU.cpp     + L3_FSMevent_CU.h      사용
+#
+# 빌드 후 BUILD/myProtocol.bin 을 NUCLEO 보드에 복사(플래시)하면 됩니다.
+# ============================================================
 NODE_TYPE ?= student
 OBJECTS += L3_FSMmain_$(NODE_TYPE).o
 OBJECTS += L3_msg.o
