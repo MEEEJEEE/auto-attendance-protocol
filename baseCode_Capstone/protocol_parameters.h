@@ -48,17 +48,17 @@
 //   - 값을 올리면(예: -60) 더 가까이 있어야 출석 인정 → 엄격해짐
 //   - 값을 내리면(예: -100) 멀리서도 출석 인정 → 느슨해짐
 //   - 현재 RSSI는 터미널에서 [단계 4] 메시지로 확인 가능
-#define L3_RSSI_THRESHOLD               -80  // 출석 인정 RSSI 임계값 (dBm)
+#define L3_RSSI_THRESHOLD               -30  // 출석 인정 RSSI 임계값 (dBm)
 
 // [출석 창 유지 시간]
 // CU가 'start'를 입력하면 이 시간(초) 동안 출석을 받고, 이후 자동으로 닫힘
 // 실습: 10으로 낮추면 10초 만에 출석 창이 닫혀서 빠른 테스트 가능
-#define L3_ATTEND_WINDOW_SEC            600  // 출석 창 유지 시간 (초, 기본 10분)
+#define L3_ATTEND_WINDOW_SEC            120  // 출석 창 유지 시간 (초, 기본 10분)
 
 // [사전 경고 타이머]
 // 출석 마감 이 시간(초) 전에 아직 미출석인 학생에게 경고 메시지 브로드캐스트
 // 반드시 L3_ATTEND_WINDOW_SEC보다 작아야 함
-#define L3_PRE_DEADLINE_ALERT_SEC       300  // 마감 전 경고 시점 (초, 기본 5분 전)
+#define L3_PRE_DEADLINE_ALERT_SEC       10  // 마감 전 경고 시점 (초, 기본 5분 전)
 
 // [브로드캐스트 ID]
 // L2 수신자 ID가 이 값이면 모든 노드가 수신하는 브로드캐스트 패킷
@@ -69,3 +69,7 @@
 // CU의 출석 테이블 크기. 학생 ID는 1 ~ (L3_MAX_STUDENTS - 1) 범위로 설정
 // main.cpp의 input_thisId가 이 범위 안에 있어야 함
 #define L3_MAX_STUDENTS                 32   // 출석 테이블 최대 학생 수
+
+// 수정: [이탈 임계값]
+// 학생의 이탈 지속 시간이 해당 값을 넘을 시 결석 처리
+#define L3_LEAVE_GRACE_SEC              20    // (초)

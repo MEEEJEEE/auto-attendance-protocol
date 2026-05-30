@@ -41,7 +41,7 @@
 // 학생 단말은 이 간격(초)마다 자동으로 CU에 위치 신호(PRESENCE)를 전송합니다.
 // 실습: 이 값을 줄이면 더 자주 전송 → CU RSSI 평균이 빨리 수집됨
 // ============================================================
-#define PRESENCE_INTERVAL_SEC       3.0f // presence 신호 자동 송신 주기 (초)
+#define PRESENCE_INTERVAL_SEC       2.0f // presence 신호 자동 송신 주기 (초)
 
 // ============================================================
 // [전역 변수]
@@ -176,8 +176,8 @@ void L3_FSMrun(void)
 
         if (main_state == L3STATE_ATTEND) // ATTEND 상태 진입 시 채팅 사용법 안내
         {
-            pc.printf("\n[CHAT FORMAT] <destId> <message>\n");
-            pc.printf("example: 3 hello\n> ");
+            pc.printf("\n[CHAT FORMAT] <message>\n");
+            pc.printf("example: hello\n> ");
         }
     }
 
@@ -359,16 +359,16 @@ void L3_FSMrun(void)
                 {
                     chat_packet_t* chat = (chat_packet_t*)dataPtr;
 
-                    if (chat->type == TYPE_CHAT) // 채팅 패킷인지 확인
+                    if (chat->type == TYPE_CHAT && chat->src_id != myId) // 채팅 패킷인지 확인
                     {
-                        // 내 ID(myId)를 목적지로 하는 메시지만 화면 출력
+                        // 내 ID(myId)를 목적지로 하는 메시지만 화면 출력 -> 브로드캐스트로 수정!!
                         // (다른 학생 간 채팅은 L2 브로드캐스트로 수신되므로 필터링 필요)
-                        if (chat->dst_id == myId)
-                        {
-                            pc.printf("\n[CHAT] #%u: %s\n",
-                                    (unsigned)chat->src_id,
-                                    chat->message);
-                        }
+                        //if (chat->dst_id == myId)
+                        //{
+                        pc.printf("\n[CHAT] #%u: %s\n",
+                                (unsigned)chat->src_id,
+                                chat->message);
+                        //}
 
                         L3_event_clearEventFlag(L3_event_msgRcvd);
                         break;
@@ -436,6 +436,7 @@ void L3_FSMrun(void)
             // =====================================================
             else if (L3_event_checkEventFlag(L3_event_dataToSend))
             {
+                /*
                 // [입력 파싱] 형식: "<destId> <message>"  예) "2 안녕하세요"
                 //
                 // 주의: ARM newlib-nano 라이브러리에서 %hhu(uint8_t 직접 파싱)는
@@ -455,28 +456,26 @@ void L3_FSMrun(void)
                     L3_event_clearEventFlag(L3_event_dataToSend);
                     break;
                 }
+                */
 
                 // [채팅 패킷 생성 및 전송]
                 // makeChatPacket(): chat_packet_t 구조체에 mode/type/src/dst/message 채움
                 // L3_chatProtocol.h에서 구조체 정의 확인 가능
                 chat_packet_t chatPkt;
                 makeChatPacket(&chatPkt,
-                            myId,    // 송신자 ID (나)
-                            destId,  // 수신자 ID (상대방 학생)
-                            (char*)sdu); // 메시지 본문
+                            myId,                   // 송신자 ID (나)
+                            L3_BROADCAST_ID,        // 수신자 ID (상대방 학생)
+                            (char*)originalWord);   // 메시지 본문
 
                 // L2를 통해 상대방 학생에게 채팅 패킷 전송
                 // (L2가 ARQ/SN을 처리하여 신뢰성 있게 전달)
                 L3_LLI_dataReqFunc(
                     (uint8_t*)&chatPkt,
                     sizeof(chat_packet_t),
-                    destId
+                    L3_BROADCAST_ID
                 );
 
-                pc.printf("[CHAT] to #%u : %s\n",
-                        (unsigned)destId,
-                        chatPkt.message);
-
+                pc.printf("[CHAT] to everyone: %s\n", chatPkt.message);
                 pc.printf("> "); // 전송 완료, 다음 입력 대기
 
                 wordLen = 0; // 입력 버퍼 초기화
@@ -514,8 +513,7 @@ void L3_FSMrun(void)
                     // ok=1이면 강의실에 돌아온 것으로 판단 → ATTEND 복귀
                     case TYPE_ATTENDANCE_APPROVAL:
                     {
-                        attendance_approval_t* approval =
-                            (attendance_approval_t*)pkt->data;
+                        attendance_approval_t* approval = (attendance_approval_t*)pkt->data;
 
                         if (approval->student_id != myId) break; // 내 패킷이 아니면 무시
 
