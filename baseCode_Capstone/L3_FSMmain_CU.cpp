@@ -45,6 +45,23 @@ static uint8_t attendanceTable[L3_MAX_STUDENTS];
 static int32_t rssiSum[L3_MAX_STUDENTS];
 static uint8_t rssiCount[L3_MAX_STUDENTS];
 
+// ============================================================
+// [이탈 감지 변수] (add-leave-timer 브랜치 병합)
+//
+// leaveDetected[i] : 학생 i가 현재 이탈 상태인지 (1=이탈 중, 0=정상)
+// leaveTimer[i]    : 학생 i의 이탈 지속 시간 측정용 타이머
+//
+// 동작 흐름:
+//   PRESENCE RSSI < 임계값 + 이미 출석한 학생
+//     → leaveDetected=1, leaveTimer 시작, ok=0 전송 (ATTEND→LEAVE)
+//   이탈 중 계속 RSSI 미달
+//     → leaveTimer 경과 확인 → L3_LEAVE_GRACE_SEC 초과 시 결석 확정
+//   이탈 중 RSSI 회복
+//     → leaveDetected=0, 타이머 리셋, ok=1 전송 (LEAVE→ATTEND 복귀)
+// ============================================================
+static uint8_t leaveDetected[L3_MAX_STUDENTS]; // 학생별 이탈 상태 플래그
+static Timer   leaveTimer[L3_MAX_STUDENTS];    // 학생별 이탈 지속 시간 타이머
+
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -153,6 +170,14 @@ void L3_initFSM(uint8_t myId, uint8_t destId)
     memset(rssiSum,   0, sizeof(rssiSum));
     memset(rssiCount, 0, sizeof(rssiCount));
 
+    // 이탈 감지 변수 초기화
+    memset(leaveDetected, 0, sizeof(leaveDetected));
+    for (int i = 0; i < L3_MAX_STUDENTS; i++)
+    {
+        leaveTimer[i].stop();
+        leaveTimer[i].reset();
+    }
+
     pc.attach(&L3service_processInputWord, Serial::RxIrq);
 
     pc.printf("[CU] Initialized. Type 'start' to open the attendance window.\n");
@@ -259,8 +284,22 @@ void L3_FSMrun(void)
 
                 switch (pkt->type_id)
                 {
+                    // ─────────────────────────────────────────────────────
                     // TYPE_PRESENCE: 학생 위치 신호 수신
+                    //
                     // RSSI는 패킷 페이로드가 아닌 L2에서 직접 측정 (L3_LLI_getRssi() 사용)
+                    // 신규·기존 학생 모두 RSSI 샘플을 L3_RSSI_SAMPLE_COUNT회 누적한 뒤
+                    // 평균값으로 강의실 내/외 여부를 판단합니다.
+                    //
+                    // [강의실 안 - avgRssi >= 임계값]
+                    //   - 이탈 중이었다면 복귀 처리 (leaveDetected 초기화, 타이머 정지)
+                    //   - 출석 승인 패킷 전송 (IDLE→ATTEND 또는 LEAVE→ATTEND)
+                    //
+                    // [강의실 밖 - avgRssi < 임계값]
+                    //   - 이미 출석한 학생: 이탈 감지 타이머 시작 → ATTEND→LEAVE
+                    //       유예 시간(L3_LEAVE_GRACE_SEC) 초과 시 결석 확정
+                    //   - 미출석 학생: 즉시 거부 (IDLE 유지)
+                    // ─────────────────────────────────────────────────────
                     case TYPE_PRESENCE:
                     {
                         int16_t rssi = L3_LLI_getRssi();
@@ -268,32 +307,17 @@ void L3_FSMrun(void)
                         // [단계 4] PRESENCE 수신 확인 (학생 ID, RSSI 출력)
                         pc.printf("\n[단계 4] 학생 %i 위치 신호(PRESENCE) 수신. RSSI=%i dBm\n",
                                   srcId, rssi);
-
                         debug_if(DBGMSG_L3,
                                  "[L3] TYPE_PRESENCE from student %i, rssi=%i dBm\n",
                                  srcId, rssi);
 
                         if (srcId < L3_MAX_STUDENTS)
                         {
-                            // 이미 출석 승인된 학생의 재전송 처리:
-                            // RSSI 누적 없이 바로 재승인 (불필요한 누적 방지)
-                            if (attendanceTable[srcId])
-                            {
-                                pc.printf("[단계 4] 학생 %i 이미 출석 확인됨. 재승인 패킷 전송.\n",
-                                          srcId);
-                                debug_if(DBGMSG_L3,
-                                         "[L3] Student %i already present, re-sending approval.\n",
-                                         srcId);
-                                L3_CU_sendApproval(srcId, 1, 0);
-                                break;
-                            }
-
-                            // 신규 학생: RSSI 다중 측정 평균 로직
-                            // L3_RSSI_SAMPLE_COUNT 회 수신 후 평균값으로 출석 판단
+                            // 신규·기존 학생 공통: RSSI 샘플 누적
                             rssiSum[srcId]  += rssi;
                             rssiCount[srcId]++;
 
-                            // [단계 5] RSSI 샘플 누적 중 (N/SAMPLE_COUNT)
+                            // [단계 5] RSSI 샘플 누적 중
                             pc.printf("[단계 5] 학생 %i RSSI=%i dBm 누적 중 (%u/%u 샘플)\n",
                                       srcId, rssi,
                                       (unsigned)rssiCount[srcId],
@@ -307,30 +331,84 @@ void L3_FSMrun(void)
                                 pc.printf("[단계 5] 학생 %i 샘플 수집 완료. 평균 RSSI=%i dBm (임계값=%i dBm)\n",
                                           srcId, avgRssi, L3_RSSI_THRESHOLD);
 
+                                // ─── 강의실 안 ───────────────────────────
                                 if (avgRssi >= L3_RSSI_THRESHOLD)
                                 {
-                                    // [단계 6-승인] 평균 RSSI 임계값 이상 → 강의실 내 위치 확인, 출석 승인
+                                    // 이탈 중이었다면 복귀 처리
+                                    if (leaveDetected[srcId] == 1)
+                                    {
+                                        leaveDetected[srcId] = 0;
+                                        leaveTimer[srcId].stop();
+                                        leaveTimer[srcId].reset();
+                                        pc.printf("[CU] 학생 %i 복귀 확인 -> ATTEND 복귀\n", srcId);
+                                        debug_if(DBGMSG_L3,
+                                                 "[L3] Student %i LEAVE -> ATTEND (returned)\n",
+                                                 srcId);
+                                    }
+
+                                    // [단계 6-승인] 출석 승인 (신규: IDLE→ATTEND, 복귀: LEAVE→ATTEND, 유지: ATTEND)
                                     pc.printf("[단계 6-승인] 학생 %i 평균 RSSI %i >= 임계값 %i. 출석 승인.\n",
                                               srcId, avgRssi, L3_RSSI_THRESHOLD);
                                     L3_CU_markPresent(srcId);
                                     // [단계 7] 승인 패킷 전송 (markPresent 내부에서 sendApproval 호출됨)
                                     pc.printf("[단계 7] 학생 %i 승인 패킷 전송 완료.\n", srcId);
                                 }
+                                // ─── 강의실 밖 ───────────────────────────
                                 else
                                 {
-                                    // [단계 6-거부] 평균 RSSI 임계값 미만 → 강의실 외부 판단, 출석 거부
-                                    pc.printf("[단계 6-거부] 학생 %i 평균 RSSI %i < 임계값 %i. 출석 거부.\n",
-                                              srcId, avgRssi, L3_RSSI_THRESHOLD);
-                                    debug_if(DBGMSG_L3,
-                                             "[L3] Student %i avgRSSI=%i below threshold, outside.\n",
-                                             srcId, avgRssi);
-                                    L3_CU_sendApproval(srcId, 0, 0);
-                                    // [단계 7] 거부 패킷 전송
-                                    pc.printf("[단계 7] 학생 %i 거부 패킷 전송 완료.\n", srcId);
+                                    if (attendanceTable[srcId] == 1)
+                                    {
+                                        // ── 이미 출석한 학생: 이탈 감지 ──
+                                        if (leaveDetected[srcId] == 0)
+                                        {
+                                            // 처음 이탈 감지 → 타이머 시작, ATTEND→LEAVE 전이
+                                            leaveDetected[srcId] = 1;
+                                            leaveTimer[srcId].reset();
+                                            leaveTimer[srcId].start();
+                                            pc.printf("[CU] 학생 %i 이탈 감지 (RSSI=%i dBm). 유예 타이머 시작 (%d초).\n",
+                                                      srcId, avgRssi, L3_LEAVE_GRACE_SEC);
+                                            debug_if(DBGMSG_L3,
+                                                     "[L3] Student %i ATTEND -> LEAVE\n", srcId);
+                                            L3_CU_sendApproval(srcId, 0, 0); // 학생 ATTEND→LEAVE
+                                        }
+                                        else
+                                        {
+                                            // 이미 이탈 중 → 유예 시간 경과 확인
+                                            float leaveSec = leaveTimer[srcId].read();
+                                            pc.printf("[CU] 학생 %i 이탈 지속 중 (%.1f / %d초)\n",
+                                                      srcId, leaveSec, L3_LEAVE_GRACE_SEC);
+
+                                            if (leaveSec >= (float)L3_LEAVE_GRACE_SEC)
+                                            {
+                                                // 유예 시간 초과 → 결석 확정
+                                                pc.printf("[CU] 학생 %i 이탈 유예 시간 초과 -> 결석 처리\n", srcId);
+                                                attendanceTable[srcId] = 0;
+                                                leaveDetected[srcId]   = 0;
+                                                leaveTimer[srcId].stop();
+                                                leaveTimer[srcId].reset();
+                                                debug_if(DBGMSG_L3,
+                                                         "[L3] Student %i LEAVE -> absent (timeout)\n",
+                                                         srcId);
+                                            }
+                                            // 유예 시간 내: 학생은 LEAVE 상태 유지 (추가 패킷 불필요)
+                                        }
+                                    }
+                                    else
+                                    {
+                                        // ── 미출석 학생: 즉시 거부 ──
+                                        // [단계 6-거부] 평균 RSSI 임계값 미만 → 강의실 외부, 출석 거부
+                                        pc.printf("[단계 6-거부] 학생 %i 평균 RSSI %i < 임계값 %i. 출석 거부.\n",
+                                                  srcId, avgRssi, L3_RSSI_THRESHOLD);
+                                        debug_if(DBGMSG_L3,
+                                                 "[L3] Student %i avgRSSI=%i below threshold, outside.\n",
+                                                 srcId, avgRssi);
+                                        L3_CU_sendApproval(srcId, 0, 0);
+                                        pc.printf("[단계 7] 학생 %i 거부 패킷 전송 완료.\n", srcId);
+                                    }
                                 }
 
                                 // 다음 측정 세션을 위해 누적값 초기화
-                                rssiSum[srcId]  = 0;
+                                rssiSum[srcId]   = 0;
                                 rssiCount[srcId] = 0;
                             }
                         }
@@ -338,7 +416,6 @@ void L3_FSMrun(void)
                     }
 
                     // 채팅은 학생 간 직접 브로드캐스트로 처리되므로 CU에서 수신 시 무시
-                    // 이탈 감지 패킷도 현재 미사용 (추후 구현 예정)
 
                     default:
                         debug_if(DBGMSG_L3,
