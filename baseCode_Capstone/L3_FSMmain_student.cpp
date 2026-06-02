@@ -48,8 +48,8 @@
 // ============================================================
 
 // 현재 FSM 상태 및 이전 상태 (상태 전이 감지용)
-static uint8_t main_state = L3STATE_ATTEND;
-static uint8_t prev_state = L3STATE_IDLE;
+static uint8_t main_state = L3STATE_IDLE;
+static uint8_t prev_state = main_state;
 
 // 키보드 입력 버퍼: 시리얼로 들어온 문자를 한 줄 단위로 누적
 static uint8_t originalWord[1030]; // 입력 문자열 버퍼
