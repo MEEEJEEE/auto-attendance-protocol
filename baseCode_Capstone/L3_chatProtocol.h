@@ -16,7 +16,7 @@
  Chat Mode / Type
 ========================================================
 */
-#define CHAT_MODE_STUDENT_TO_STUDENT   0x03U
+#define PACKET_MODE_STUDENT_TO_STUDENT   0x03U
 #define TYPE_CHAT                      0x60U
 
 /*
@@ -24,7 +24,7 @@
  Configuration
 ========================================================
 */
-#define CHAT_MAX_MESSAGE_LEN           64
+#define CHAT_MAX_MESSAGE_LEN           32
 #pragma pack(push, 1)
 
 /*
@@ -34,8 +34,8 @@
 */
 typedef struct
 {
-    uint8_t mode;                         // CHAT_MODE_STUDENT_TO_STUDENT
-    uint8_t type;                         // TYPE_CHAT
+    uint32_t mode;                         // CHAT_MODE_STUDENT_TO_STUDENT
+    uint32_t type;                         // TYPE_CHAT
 
     uint8_t src_id;                       // sender student ID
     uint8_t dst_id;                       // destination student ID
@@ -58,7 +58,7 @@ static inline void makeChatPacket(
     const char* msg
 )
 {
-    pkt->mode       = CHAT_MODE_STUDENT_TO_STUDENT;
+    pkt->mode       = PACKET_MODE_STUDENT_TO_STUDENT;
     pkt->type       = TYPE_CHAT;
 
     pkt->src_id = srcId;

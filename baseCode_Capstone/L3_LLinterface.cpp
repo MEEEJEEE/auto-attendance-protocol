@@ -168,7 +168,7 @@ void L3_LLI_sendChatPacket(chat_packet_t* pkt)
     // Routing
     // --------------------------------
     destId = pkt->dst_id;
-
+/*
     // --------------------------------
     // DEBUG 1: 원본 채팅 정보
     // --------------------------------
@@ -211,7 +211,7 @@ void L3_LLI_sendChatPacket(chat_packet_t* pkt)
         debug_if(DBGMSG_L3, "%02X ", raw[i]);
     }
     debug_if(DBGMSG_L3, "\n");
-
+*/
     // --------------------------------
     // Send to L2
     // --------------------------------
