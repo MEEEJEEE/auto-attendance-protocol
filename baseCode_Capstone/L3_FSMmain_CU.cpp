@@ -45,6 +45,7 @@ static uint8_t attendanceTable[L3_MAX_STUDENTS];
 static int32_t rssiSum[L3_MAX_STUDENTS];
 static uint8_t rssiCount[L3_MAX_STUDENTS];
 
+static int16_t lastRssi[L3_MAX_STUDENTS];
 // ============================================================
 // [이탈 감지 변수] (add-leave-timer 브랜치 병합)
 //
@@ -257,6 +258,23 @@ void L3_FSMrun(void)
 
                 // 모든 학생에게 TIMEOUT_FLAG_CLOSED 브로드캐스트
                 L3_CU_broadcastTimeout(TIMEOUT_FLAG_CLOSED);
+
+                // 수정: 마감 시점 결석 판정을 "마지막 수신 RSSI" 기준으로 변경.
+                //       마지막 RSSI < 임계값이면 (LEAVE 여부·유예 시간과 무관하게) 무조건 결석.
+                for (int i = 0; i < L3_MAX_STUDENTS; i++)
+                {
+                    if (attendanceTable[i] == 1 && lastRssi[i] < L3_RSSI_THRESHOLD)
+                    {
+                        attendanceTable[i] = 0;   // PRESENT 취소 → 결석
+                        pc.printf("[CU] 학생 %i 마감 시점 마지막 RSSI=%i < 임계값 %i -> 결석 처리\n",
+                                  i, lastRssi[i], L3_RSSI_THRESHOLD);
+                    }
+                    // 상태 변수 정리
+                    leaveDetected[i] = 0;
+                    leaveTimer[i].stop();
+                    leaveTimer[i].reset();
+                }
+                
                 L3_CU_printAttendanceSummary();
 
                 // 상태 전이: 1 (OPEN) -> 2 (CLOSED)
@@ -303,6 +321,11 @@ void L3_FSMrun(void)
                     case TYPE_PRESENCE:
                     {
                         int16_t rssi = L3_LLI_getRssi();
+
+                        if (srcId < L3_MAX_STUDENTS)
+                        {
+                            lastRssi[srcId] = rssi;
+                        }
 
                         // [단계 4] PRESENCE 수신 확인 (학생 ID, RSSI 출력)
                         pc.printf("\n[단계 4] 학생 %i 위치 신호(PRESENCE) 수신. RSSI=%i dBm\n",
