@@ -4,8 +4,11 @@
 #include "L3_LLinterface.h"
 #include "L3_convertPacket.h"
 #include "L3_chatProtocol.h"
+#include "L3_chatSend.h"
 #include "protocol_parameters.h"
 #include "mbed.h"
+
+#define CU_ID 0
 
 //FSM state -------------------------------------------------
 #define L3STATE_IDLE                0
@@ -319,6 +322,8 @@ void L3_FSMrun(void)
                             myId,
                             destId,
                             (char*)sdu);
+                            
+                L3_sendChatPacket(&chatPkt);
 
                 L3_LLI_dataReqFunc(
                     (uint8_t*)&chatPkt,

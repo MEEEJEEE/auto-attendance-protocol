@@ -4,6 +4,7 @@
 #include "L3_msg.h"
 #include "L3_convertPacket.h"
 #include "protocol_parameters.h"
+#include "L2_connection.h"
 #include "time.h"
 
 #define CU_ID 0
@@ -144,6 +145,14 @@ void L3_LLI_sendPacket(packet_data_t* pkt)
              (unsigned long)pkt->type_id,
              (unsigned long)pkt->mode,
              destId);
+
+    // -----------------------------
+    // Connect L2 peer session
+    // -----------------------------
+        if (destId != L3_BROADCAST_ID)
+    {
+        L2_connect(destId);
+    }
 
     // -----------------------------
     // Send down to L2

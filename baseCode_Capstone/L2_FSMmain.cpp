@@ -4,6 +4,7 @@
 #include "L2_LLinterface.h"
 #include "L3_LLinterface.h"
 #include "protocol_parameters.h"
+#include "L2_context.h"
 
 //FSM state -------------------------------------------------
 #define L2STATE_IDLE              0
@@ -18,10 +19,6 @@
 static uint8_t main_state = L2STATE_IDLE; //protocol state
 static uint8_t prev_state = main_state;
 
-//source/destination ID
-static uint8_t myL2ID=1;
-static uint8_t destL2ID=0;
-
 //L2 PDU context/size
 static uint8_t sduBuffer[SDUBUFFER_SIZE];
 static uint8_t sduBufferSize;
@@ -34,13 +31,19 @@ static uint8_t sduLen;
 static uint8_t pduBuffer[SDUBUFFER_SIZE];
 static uint8_t pduBufferSize;
 //ARQ parameters -------------------------------------------------------------
-static uint8_t seqNum = 0;     //ARQ sequence number
+//static uint8_t seqNum = 0;     //ARQ sequence number
 #ifndef DISABLE_ARQ
 static uint8_t retxCnt = 0;    //ARQ retransmission counter
 static uint8_t arqAck[5];      //ARQ ACK PDU
 #define L2_BROADCAST_ID             255
 #endif
 static uint8_t reqestedId=0;
+
+/*
+//source/destination ID
+static uint8_t myL2ID = 0;
+static uint8_t destL2ID = L2_BROADCAST_ID;
+*/
 
 static uint8_t L2_validityCheck_ID(void)
 {
@@ -134,7 +137,7 @@ void L2_LLI_reconfigSrcId(uint8_t myId)
 void L2_initFSM(uint8_t myId)
 {
     myL2ID = myId;
-    destL2ID = 0; 
+    destL2ID = L2_ID_INVALID; 
 
     L2_event_clearAllEventFlag();
 

@@ -51,6 +51,9 @@ OBJECTS += L2_FSMmain.o
 OBJECTS += L2_msg.o
 OBJECTS += L2_FSMevent.o
 OBJECTS += L2_LLinterface.o
+OBJECTS += L3_chatSend.o   
+OBJECTS += L2_connection.o 
+OBJECTS += L2_context.o 
 OBJECTS += L2_timer.o
 # NODE_TYPE selects which L3 FSM to compile.
 # Use: make NODE_TYPE=CU      -> builds Control Unit binary (default)

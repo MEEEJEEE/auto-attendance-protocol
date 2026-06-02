@@ -49,8 +49,6 @@ int main(void){
         //source & destination ID setting
     printf(":: ID for this node : ");
     input_thisId = getID();
-    printf(":: ID for the destination : ");
-    input_thisId = getID();
     getchar(); // consume trailing newline after scanf
 
     printf("endnode : %i, dest : %i\n", input_thisId, input_destId);
