@@ -8,6 +8,7 @@
 #endif
 #include "L3_msg.h"
 #include "L3_convertPacket.h"
+#include "L3_chatProtocol.h"
 #include "protocol_parameters.h"
 #include "time.h"
 
@@ -156,4 +157,73 @@ void L3_LLI_sendPacket(packet_data_t* pkt)
     L3_LLI_dataReqFunc((uint8_t*)pkt,
                        sizeof(packet_data_t),
                        destId);
+}
+
+// ===== for Chat packet sending =====
+void L3_LLI_sendChatPacket(chat_packet_t* pkt)
+{
+    uint8_t destId;
+
+    // --------------------------------
+    // Routing
+    // --------------------------------
+    destId = pkt->dst_id;
+
+    // --------------------------------
+    // DEBUG 1: 원본 채팅 정보
+    // --------------------------------
+    debug_if(DBGMSG_L3,
+             "\n[L3][CHAT] =========================\n");
+
+    debug_if(DBGMSG_L3,
+             "[L3][CHAT] SEND REQUEST\n");
+
+    debug_if(DBGMSG_L3,
+             "[L3][CHAT] src_id : %u\n",
+             pkt->src_id);
+
+    debug_if(DBGMSG_L3,
+             "[L3][CHAT] dst_id : %u\n",
+             pkt->dst_id);
+
+    debug_if(DBGMSG_L3,
+             "[L3][CHAT] msg    : %s\n",
+             pkt->message);
+
+    debug_if(DBGMSG_L3,
+             "[L3][CHAT] resolved destId (PHY) : %u\n",
+             destId);
+
+    debug_if(DBGMSG_L3,
+             "[L3][CHAT] packet size : %u bytes\n",
+             (unsigned)sizeof(chat_packet_t));
+
+    // --------------------------------
+    // DEBUG 2: raw hex dump (중요)
+    // → L2 frame 깨지는지 확인용
+    // --------------------------------
+    debug_if(DBGMSG_L3,
+             "[L3][CHAT] RAW DUMP: ");
+
+    uint8_t* raw = (uint8_t*)pkt;
+    for (int i = 0; i < (int)sizeof(chat_packet_t); i++)
+    {
+        debug_if(DBGMSG_L3, "%02X ", raw[i]);
+    }
+    debug_if(DBGMSG_L3, "\n");
+
+    // --------------------------------
+    // Send to L2
+    // --------------------------------
+    debug_if(DBGMSG_L3,
+             "[L3][CHAT] calling L3_LLI_dataReqFunc...\n");
+
+    L3_LLI_dataReqFunc(
+        (uint8_t*)pkt,
+        sizeof(chat_packet_t),
+        destId
+    );
+
+    debug_if(DBGMSG_L3,
+             "[L3][CHAT] L3_LLI_dataReqFunc returned\n");
 }

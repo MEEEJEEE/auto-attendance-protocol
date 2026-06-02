@@ -2,6 +2,7 @@
 #define L3_LLINTERFACE_H
 
 #include "L3_convertPacket.h"
+#include "L3_chatProtocol.h"
 
 extern void (*L3_LLI_dataReqFunc)(uint8_t* msg, uint8_t size, uint8_t destId);
 
@@ -18,5 +19,7 @@ void     L3_LLI_reconfigSrcIdCnf(uint8_t res);
 
 // ==== for L3_convertPacket.h ====
 void L3_LLI_sendPacket(packet_data_t* pkt);
+// ==== for Chat packet sending ====
+void L3_LLI_sendChatPacket(chat_packet_t* pkt);
 
 #endif // L3_LLINTERFACE_H

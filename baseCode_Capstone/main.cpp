@@ -17,8 +17,8 @@
 uint8_t input_thisId = 0;    // CU ID 고정
 uint8_t input_destId = 255;  // CU는 브로드캐스트로 송신
 #else
-uint8_t input_thisId = 1;    // 학생 ID (여러 학생이면 각자 다르게 설정)
-uint8_t input_destId = 0;    // 목적지 = CU
+uint8_t input_thisId = 1;    // 학생 ID (여러 학생이면 각자 다르게 설정) //
+uint8_t input_destId = 2;    // 목적지 = CU
 #endif
 
 //FSM operation implementation ------------------------------------------------
