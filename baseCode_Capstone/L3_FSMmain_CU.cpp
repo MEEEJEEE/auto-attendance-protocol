@@ -154,6 +154,43 @@ static void L3service_processInputWord(void)
 
 
 // ---------------------------------------------------------------------------
+// Open (or re-open) the attendance window.
+// 모든 학생 상태 초기화 후 OPEN 브로드캐스트 전송 및 타이머 시작.
+// L3STATE_WAIT 과 L3STATE_CLOSED 양쪽에서 호출 가능.
+// ---------------------------------------------------------------------------
+static void L3_CU_startAttendanceWindow(void)
+{
+    // 모든 학생 상태를 미출석으로 초기화
+    memset(attendanceTable, 0, sizeof(attendanceTable));
+    memset(leaveDetected,   0, sizeof(leaveDetected));
+    memset(rssiSum,         0, sizeof(rssiSum));
+    memset(rssiCount,       0, sizeof(rssiCount));
+    for (int i = 0; i < L3_MAX_STUDENTS; i++)
+    {
+        leaveTimer[i].stop();
+        leaveTimer[i].reset();
+    }
+
+    // 잔여 타이머 이벤트 제거 후 재시작
+    L3_timer_stopAttendanceWindow();
+    L3_event_clearEventFlag(L3_event_attendDeadline);
+    L3_event_clearEventFlag(L3_event_preDeadlineAlert);
+
+    pc.printf("\n[단계 1] 'start' 명령 수신. 출석 창을 열겠습니다.\n");
+    pc.printf("[CU] Attendance window OPEN (%i sec).\n", L3_ATTEND_WINDOW_SEC);
+
+    pc.printf("[단계 2] 출석 창 열림 신호(OPEN) 전체 브로드캐스트 전송 중...\n");
+    L3_CU_broadcastTimeout(TIMEOUT_FLAG_OPEN);
+    pc.printf("[단계 2] 브로드캐스트 전송 완료.\n");
+
+    pc.printf("[단계 3] 출석 타이머 시작 (마감: %d초, 사전경고: %d초).\n",
+              L3_ATTEND_WINDOW_SEC, L3_PRE_DEADLINE_ALERT_SEC);
+    L3_timer_startAttendanceWindow();
+
+    main_state = L3STATE_OPEN;
+}
+
+// ---------------------------------------------------------------------------
 // Public interface
 // ---------------------------------------------------------------------------
 
@@ -466,11 +503,27 @@ void L3_FSMrun(void)
 
             if (L3_event_checkEventFlag(L3_event_msgRcvd))
             {
-                // late-arriving packets are dropped after the window closes
+                // 출석 창 닫힌 후 수신된 패킷은 모두 폐기
                 debug_if(DBGMSG_L3,
                          "[L3][CLOSED] Late packet from student %i discarded.\n",
                          L3_LLI_getSrcId());
                 L3_event_clearEventFlag(L3_event_msgRcvd);
+            }
+
+            if (L3_event_checkEventFlag(L3_event_dataToSend))
+            {
+                if (strcmp((char*)inputWord, "start") == 0)
+                {
+                    // 모든 학생 상태 초기화 후 새 출석 창 오픈
+                    pc.printf("[CU] 새 출석 창을 시작합니다. 모든 학생 상태 초기화.\n");
+                    L3_CU_startAttendanceWindow();
+                }
+                else
+                {
+                    pc.printf("[CU][CLOSED] 'start'를 입력하면 새 출석을 시작합니다.\n");
+                }
+                inputWordLen = 0;
+                L3_event_clearEventFlag(L3_event_dataToSend);
             }
             break;
 

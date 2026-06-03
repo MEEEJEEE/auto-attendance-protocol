@@ -21,18 +21,53 @@ uint8_t input_thisId = 1;    // 학생 ID (여러 학생이면 각자 다르게 
 uint8_t input_destId = 2;    // 목적지 = CU
 #endif
 
+#ifndef IS_CU
+// 학생 노드 번호 입력 (1-99, 최대 두 자리)
+static uint8_t getNodeId(void)
+{
+    char buf[4];
+    int  idx = 0;
+    char c;
+
+    printf("Enter node number (1-99): ");
+
+    while (1)
+    {
+        c = (char)getchar();
+        if (c == '\n' || c == '\r')
+        {
+            buf[idx] = '\0';
+            break;
+        }
+        if (idx < 2 && c >= '0' && c <= '9')
+            buf[idx++] = c;
+    }
+
+    int id = atoi(buf);
+    if (id >= 1 && id <= 99)
+        return (uint8_t)id;
+
+    printf("[WARN] Invalid ID, using default 1\n");
+    return 1;
+}
+#endif
+
 //FSM operation implementation ------------------------------------------------
 int main(void){
 
     printf("------------------ protocol stack starts! --------------------------\n");
+
+#ifndef IS_CU
+    input_thisId = getNodeId();
+#endif
+
     printf("endnode : %i, dest : %i\n", input_thisId, input_destId);
 
     L2_initFSM(input_thisId);
     L3_initFSM(input_thisId, input_destId);
-    
+
     while(1){
         L2_FSMrun();
         L3_FSMrun();
- 
-   }
+    }
 }
