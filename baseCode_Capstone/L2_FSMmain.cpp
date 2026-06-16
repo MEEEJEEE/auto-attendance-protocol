@@ -181,7 +181,7 @@ void L2_LLI_reconfigSrcId(uint8_t myId)
 void L2_initFSM(uint8_t myId)
 {
     myL2ID = myId;
-    destL2ID = 0; 
+    destL2ID = 0; // default destination (overwritten by L2_connect())
 
     L2_event_clearAllEventFlag();
 

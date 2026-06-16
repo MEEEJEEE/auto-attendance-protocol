@@ -48,8 +48,8 @@
 // ============================================================
 
 // 현재 FSM 상태 및 이전 상태 (상태 전이 감지용)
-static uint8_t main_state = L3STATE_IDLE;
-static uint8_t prev_state = main_state;
+static uint8_t main_state = L3STATE_ATTEND;//L3STATE_IDLE;
+static uint8_t prev_state = L3STATE_IDLE;//main_state;
 
 // 키보드 입력 버퍼: 시리얼로 들어온 문자를 한 줄 단위로 누적
 static uint8_t originalWord[1030]; // 입력 문자열 버퍼
@@ -60,7 +60,7 @@ static uint8_t sdu[L3_MAXDATASIZE]; // 채팅 메시지 본문 임시 저장
 static packet_data_t txPacket;
 
 // 시리얼 포트 (PC와 USB 시리얼 통신)
-static Serial pc(USBTX, USBRX);
+Serial pc(USBTX, USBRX);
 static uint8_t myDestId;   // 목적지 ID: CU의 L2 ID (기본값 0)
 static uint8_t myId;       // 자신의 L2 ID (main.cpp에서 input_thisId로 설정)
 
@@ -366,7 +366,7 @@ void L3_FSMrun(void)
                         // (다른 학생 간 채팅은 L2 브로드캐스트로 수신되므로 필터링 필요)
                         if (chat->dst_id == myId)
                         {
-                            pc.printf("\n[CHAT] #%u: %s\n",
+                            pc.printf("\n[CHAT RECV] from #%u : %s\n",
                                     (unsigned)chat->src_id,
                                     chat->message);
                         }
@@ -470,7 +470,7 @@ void L3_FSMrun(void)
                 // (L2가 ARQ/SN을 처리하여 신뢰성 있게 전달)
                 L3_LLI_sendChatPacket(&chatPkt);
 
-                pc.printf("[CHAT] to #%u : %s\n",
+                pc.printf("[CHAT SEND] to #%u : %s\n",
                         (unsigned)destId,
                         chatPkt.message);
 

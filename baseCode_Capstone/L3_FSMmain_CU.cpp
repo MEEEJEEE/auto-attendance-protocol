@@ -26,7 +26,7 @@ static uint8_t main_state = L3STATE_WAIT;
 static uint8_t prev_state = main_state;
 
 // serial port interface used for operator commands and status output
-static Serial pc(USBTX, USBRX);
+Serial pc(USBTX, USBRX);
 
 // keyboard input buffer: accumulates characters typed by the CU operator
 static uint8_t inputWord[L3_MAXDATASIZE];
