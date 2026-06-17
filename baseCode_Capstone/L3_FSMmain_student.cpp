@@ -48,8 +48,8 @@
 // ============================================================
 
 // 현재 FSM 상태 및 이전 상태 (상태 전이 감지용)
-static uint8_t main_state = L3STATE_ATTEND;//L3STATE_IDLE;
-static uint8_t prev_state = L3STATE_IDLE;//main_state;
+static uint8_t main_state = L3STATE_IDLE;   //L3STATE_IDLE;
+static uint8_t prev_state = main_state;     //main_state;
 
 // 키보드 입력 버퍼: 시리얼로 들어온 문자를 한 줄 단위로 누적
 static uint8_t originalWord[1030]; // 입력 문자열 버퍼
@@ -347,7 +347,7 @@ void L3_FSMrun(void)
         // =====================================================
             if (L3_event_checkEventFlag(L3_event_msgRcvd))
             {
-                pc.printf("[RX EVENT]\n");
+                //pc.printf("[RX EVENT]\n");
                 uint8_t*       dataPtr = L3_LLI_getMsgPtr();
                 uint8_t        size    = L3_LLI_getSize();
 
@@ -419,7 +419,7 @@ void L3_FSMrun(void)
                         else if (info->timeout_flag == TIMEOUT_FLAG_WARNING)
                         {
                             // 마감 5분 전 경고 (ATTEND 상태이므로 이미 출석은 완료됨)
-                            pc.printf("[ATTEND] ⚠ 출석 마감 5분 전입니다!\n");
+                            //pc.printf("[ATTEND] ⚠ 출석 마감 5분 전입니다!\n");
                         }
                         break;
                     }
@@ -538,6 +538,11 @@ void L3_FSMrun(void)
                             L3_event_clearAllEventFlag(); // 모든 이벤트 초기화
                             wordLen    = 0;
                             main_state = L3STATE_IDLE; // ← 상태 전이 포인트
+                        }
+                        else if (info->timeout_flag == TIMEOUT_FLAG_WARNING)
+                        {
+                            // 마감 5분 전 경고 (ATTEND 상태이므로 이미 출석은 완료됨)
+                            pc.printf("[LEAVE] ⚠ 출석 마감 5분 전입니다!\n");
                         }
                         break;
                     }

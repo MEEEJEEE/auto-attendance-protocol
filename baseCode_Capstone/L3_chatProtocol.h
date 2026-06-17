@@ -24,7 +24,7 @@
  Configuration
 ========================================================
 */
-#define CHAT_MAX_MESSAGE_LEN           32
+#define CHAT_MAX_MESSAGE_LEN           16
 #pragma pack(push, 1)
 
 /*
