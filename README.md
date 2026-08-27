@@ -17,17 +17,17 @@ auto-attendance-protocol/
 │   └── FSM_design.md                # FSM 설계 (State, Event, Action, Cond 정의)
 │
 └── baseCode_Capstone/               # 구현 코드
-    ├── main.cpp                     # 진입점, 노드 ID 설정
+    ├── main.cpp                     # 공통 진입점, 노드 ID/목적지 ID 설정
     ├── protocol_parameters.h        # 전체 파라미터 상수 정의
     ├── L2_FSMmain.cpp/h             # L2 ARQ 상태 기계
     ├── L2_msg.cpp/h                 # L2 PDU 인코딩/디코딩
     ├── L2_LLinterface.cpp/h         # L2 ↔ PHYMAC 인터페이스
-    ├── L3_FSMmain_CU.cpp            # CU L3 FSM
-    ├── L3_FSMmain_student.cpp       # 학생 L3 FSM
+    ├── L3_FSMmain.cpp               # CU/학생 L3 FSM 통합 구현 (런타임 역할 분기)
+    ├── L3_FSMevent.cpp/h            # CU/학생 공통 L3 이벤트 관리
     ├── L3_LLinterface.cpp/h         # L3 ↔ L2 인터페이스
     ├── L3_chatProtocol.h            # 채팅 패킷 구조체 및 생성 함수
     ├── L3_convertPacket.h           # 출석 패킷 구조체 및 생성 함수
-    └── Makefile                     # CU / student 분리 빌드
+    └── Makefile                     # CU/student 전체를 포함한 단일 펌웨어 빌드
 ```
 
 ---
@@ -62,22 +62,28 @@ auto-attendance-protocol/
 5. 강의실 이탈 감지 (RSSI 임계값 미만 → LEAVE 전이, 유예 시간 초과 시 결석 확정)
 6. 이탈 후 복귀 감지 (RSSI 회복 시 ATTEND 복귀)
 7. 출석 창 종료 후 재오픈 가능 (`start` 재입력 → 모든 학생 상태 초기화 후 재시작)
-8. 부팅 시 노드 번호 입력 (`Enter node number (1-99):`, 학생 단말 전용)
+8. 부팅 시 자신의 노드 ID와 기본 목적지 ID 입력 (CU/학생 공통)
 
 ---
 
 ## 🏗️ 빌드 방법
 
 ```bash
-# CU (교수자 단말) 빌드
-make NODE_TYPE=CU
-
-# 학생 단말 빌드
-make NODE_TYPE=student
+# CU와 student 기능을 모두 포함한 단일 바이너리 빌드
+make
 ```
 
-- **CU**: ID = 0 고정, 브로드캐스트 송신
-- **학생**: 부팅 시 `Enter node number (1-99):` 프롬프트로 ID 직접 입력
+기존 역할별 소스 구조에서 업데이트한 체크아웃은, 삭제된 헤더를 가리키는 이전
+의존성 파일을 없애기 위해 최초 빌드 전에 한 번 `make clean`을 실행해야 합니다.
+
+생성되는 `BUILD/myProtocol.bin` 하나에 CU와 student FSM이 모두 포함됩니다.
+역할은 빌드할 때가 아니라 부팅 시 입력하는 `my ID`로 선택합니다.
+
+부팅 시 두 역할 모두 `Enter my ID:`와 `Enter destination ID:`를 차례로 입력합니다.
+
+- **CU**: `my ID`는 `0`을 사용합니다. CU L3는 입력한 기본 목적지 ID를 사용하지 않고,
+  알림은 브로드캐스트하고 승인은 해당 학생에게 유니캐스트합니다.
+- **학생**: `my ID`는 학생 번호를, `destination ID`는 CU의 ID인 `0`을 입력합니다.
 
 ---
 

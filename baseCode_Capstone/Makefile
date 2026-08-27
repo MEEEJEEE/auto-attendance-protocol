@@ -53,35 +53,17 @@ OBJECTS += L2_FSMevent.o
 OBJECTS += L2_LLinterface.o
 OBJECTS += L2_timer.o
 # ============================================================
-# [실습 빌드 선택] NODE_TYPE으로 학생용/CU용 코드를 선택합니다.
+# [통합 빌드]
 #
-#   make                      -> 학생용 바이너리 빌드 (기본값)
-#   make NODE_TYPE=student    -> 학생용 바이너리 빌드
-#   make NODE_TYPE=CU         -> CU(교수자)용 바이너리 빌드
+#   make -> CU와 student 로직을 모두 포함한 단일 펌웨어 빌드
 #
-# 학생용: L3_FSMmain_student.cpp + L3_FSMevent_student.h 사용
-# CU용  : L3_FSMmain_CU.cpp     + L3_FSMevent_CU.h      사용
-#
+# 실행 시 my ID가 0이면 CU, 그 외 ID이면 student FSM을 선택합니다.
 # 빌드 후 BUILD/myProtocol.bin 을 NUCLEO 보드에 복사(플래시)하면 됩니다.
 # ============================================================
-NODE_TYPE ?= student
-OBJECTS += L3_FSMmain_$(NODE_TYPE).o
-OBJECTS += L3_msg.o
-OBJECTS += L3_FSMevent_$(NODE_TYPE).o
+OBJECTS += L3_FSMmain.o
+OBJECTS += L3_FSMevent.o
 OBJECTS += L3_LLinterface.o
 OBJECTS += L3_timer.o
-
-# NODE_TYPE별 컴파일 플래그 추가
-# L3_LLinterface.cpp에서 이벤트 헤더를 조건부로 선택하기 위해 사용
-# make NODE_TYPE=student  -> IS_STUDENT 플래그 정의
-# make NODE_TYPE=CU (기본) -> IS_CU 플래그 정의
-ifeq ($(NODE_TYPE),student)
-CXX_FLAGS += -DIS_STUDENT
-C_FLAGS   += -DIS_STUDENT
-else
-CXX_FLAGS += -DIS_CU
-C_FLAGS   += -DIS_CU
-endif
 
  SYS_OBJECTS += lib/Rx_HAL.o
  SYS_OBJECTS += lib/Rx_HHI.o
@@ -465,9 +447,7 @@ LD_SYS_LIBS :=-Wl,--start-group -lstdc++ -lsupc++ -lm -lc -lgcc -lnosys -lmbed -
 
 .PHONY: all lst size
 
-
 all: $(PROJECT).bin $(PROJECT).hex size
-
 
 .s.o:
 	+@$(call MAKEDIR,$(dir $@))
@@ -500,9 +480,9 @@ $(PROJECT).link_script.ld: $(LINKER_SCRIPT)
 
 
 
-$(PROJECT).elf: $(OBJECTS) $(SYS_OBJECTS) $(PROJECT).link_script.ld 
+$(PROJECT).elf: $(OBJECTS) $(SYS_OBJECTS) $(PROJECT).link_script.ld
 	+@echo "link: $(notdir $@)"
-	@$(LD) $(LD_FLAGS) -T $(filter-out %.o, $^) $(LIBRARY_PATHS) --output $@ $(filter %.o, $^) $(LIBRARIES) $(LD_SYS_LIBS)
+	@$(LD) $(LD_FLAGS) -T $(PROJECT).link_script.ld $(LIBRARY_PATHS) --output $@ $(filter %.o, $^) $(LIBRARIES) $(LD_SYS_LIBS)
 
 
 $(PROJECT).bin: $(PROJECT).elf

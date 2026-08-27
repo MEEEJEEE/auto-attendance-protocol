@@ -1,18 +1,10 @@
 #include "mbed.h"
-// NODE_TYPE 빌드 플래그에 따라 이벤트 헤더 조건부 선택
-// Makefile에서 NODE_TYPE=student이면 IS_STUDENT가 정의됨
-#ifdef IS_STUDENT
-#include "L3_FSMevent_student.h"
-#else
-#include "L3_FSMevent_CU.h"
-#endif
+#include "L3_FSMevent.h"
 #include "L3_msg.h"
 #include "L3_convertPacket.h"
 #include "L3_chatProtocol.h"
 #include "protocol_parameters.h"
 #include "time.h"
-
-#define CU_ID 0
 
 static uint8_t rcvdMsg[L3_MAXDATASIZE];
 static uint8_t rcvdSize;
@@ -98,7 +90,7 @@ void L3_LLI_sendPacket(packet_data_t* pkt)
         // Student → CU (always fixed destination)
         case PACKET_MODE_STUDENT_TO_CU:
         {
-            destId = CU_ID;
+            destId = L3_CU_ID;
             break;
         }
 
